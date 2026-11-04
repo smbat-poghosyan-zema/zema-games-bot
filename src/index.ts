@@ -1,12 +1,12 @@
 import { existsSync } from 'node:fs';
-import { createServer } from 'node:http';
 import { webhookCallback } from 'grammy';
 import { ALLOWED_UPDATES, createBot, registerCommands } from './bot.js';
 import { loadConfig } from './config.js';
 import { GameFlow } from './flow.js';
 import { loadGames } from './games.js';
 import { installProcessErrorHandlers, log } from './log.js';
-import { createReminderJob } from './schedule.js';
+import { createReminderJob, isReminderDue } from './schedule.js';
+import { createHttpServer } from './server.js';
 import { JsonStore } from './store.js';
 
 // Local dev convenience: read .env if present (production passes real env vars).
@@ -50,10 +50,16 @@ async function main(): Promise<void> {
   if (config.mode === 'webhook') {
     const wh = config.webhook!;
     const handle = webhookCallback(bot, 'http', { secretToken: wh.secret });
-    const server = createServer((req, res) => {
-      if (req.method === 'POST' && req.url === wh.path) return void handle(req, res);
-      if (req.method === 'GET' && req.url === '/healthz') return void res.writeHead(200).end('ok');
-      res.writeHead(404).end();
+    const server = createHttpServer({
+      webhookPath: wh.path,
+      onUpdate: handle,
+      ...(wh.cronSecret ? { cronSecret: wh.cronSecret } : {}),
+      onReminder: async () => {
+        if (!config.reminder.enabled || !isReminderDue(config.reminder, new Date())) return 'not due';
+        const result = await flow.sendReminder();
+        log.info(`[reminder] ${result} (external trigger)`);
+        return result;
+      },
     });
     await new Promise<void>((resolve) => server.listen(wh.port, resolve));
     await bot.api.setWebhook(`${wh.url}${wh.path}`, {
@@ -61,7 +67,7 @@ async function main(): Promise<void> {
       allowed_updates: [...ALLOWED_UPDATES],
       max_connections: 1,
     });
-    log.info(`[bot] webhook set, listening on :${wh.port}${wh.path}`);
+    log.info(`[bot] webhook set, listening on :${wh.port}${wh.path}${wh.cronSecret ? ', /cron/reminder enabled' : ''}`);
     shutdown = async () => void server.close();
   } else {
     // Long polling needs the webhook removed; pending updates are kept so a restart

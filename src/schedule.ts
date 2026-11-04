@@ -53,6 +53,24 @@ export function nextReminders(config: ReminderConfig, count: number, from: Date)
   }
 }
 
+/**
+ * True when the most recent scheduled reminder time is at most `windowMinutes` ago.
+ * Used by the /cron/reminder endpoint: an external scheduler wakes the bot up around the
+ * reminder time, and this keeps REMINDER_TIME / REMINDER_DAYS the single source of truth.
+ */
+export function isReminderDue(config: ReminderConfig, now: Date, windowMinutes = 30): boolean {
+  const job = createReminderJob(config);
+  try {
+    // previousRuns() excludes the reference itself, so look from one second ahead to count
+    // a call that lands exactly on the reminder time.
+    const previous = job.previousRuns(1, new Date(now.getTime() + 1000))[0];
+    if (!previous) return false;
+    return now.getTime() - previous.getTime() <= windowMinutes * 60_000;
+  } finally {
+    job.stop();
+  }
+}
+
 /** Calendar date (YYYY-MM-DD) of `date` in the given timezone. */
 export function localDateKey(date: Date, timezone: string): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);

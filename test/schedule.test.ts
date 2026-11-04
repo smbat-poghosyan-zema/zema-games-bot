@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_REMINDER, localDateKey, nextReminders, reminderCronPattern } from '../src/schedule.js';
+import { DEFAULT_REMINDER, isReminderDue, localDateKey, nextReminders, reminderCronPattern } from '../src/schedule.js';
 
 // Asia/Yerevan is UTC+4 all year (no DST), so 14:00 local is 10:00 UTC.
 const iso = (dates: Date[]) => dates.map((d) => d.toISOString());
@@ -54,5 +54,17 @@ describe('reminder schedule', () => {
   it('computes the local calendar date in Yerevan', () => {
     // 22:30 UTC Monday is already Tuesday 02:30 in Yerevan
     expect(localDateKey(new Date('2026-11-02T22:30:00Z'), 'Asia/Yerevan')).toBe('2026-11-03');
+  });
+});
+
+describe('isReminderDue', () => {
+  it('is due from the reminder time until the window ends, on weekdays only', () => {
+    // Wednesday 2026-11-04, 14:00 Yerevan = 10:00 UTC
+    expect(isReminderDue(DEFAULT_REMINDER, new Date('2026-11-04T10:00:00Z'))).toBe(true);
+    expect(isReminderDue(DEFAULT_REMINDER, new Date('2026-11-04T10:29:00Z'))).toBe(true);
+    expect(isReminderDue(DEFAULT_REMINDER, new Date('2026-11-04T10:31:00Z'))).toBe(false);
+    expect(isReminderDue(DEFAULT_REMINDER, new Date('2026-11-04T09:59:00Z'))).toBe(false);
+    // Saturday 14:05 Yerevan
+    expect(isReminderDue(DEFAULT_REMINDER, new Date('2026-11-07T10:05:00Z'))).toBe(false);
   });
 });

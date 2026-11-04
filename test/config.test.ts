@@ -36,3 +36,20 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...base, JOIN_POLL_SECONDS: '2' })).toThrow(/JOIN_POLL_SECONDS/);
   });
 });
+
+describe('loadConfig on Render', () => {
+  it('falls back to RENDER_EXTERNAL_URL and reads CRON_SECRET', () => {
+    const c = loadConfig({
+      ...base,
+      BOT_MODE: 'webhook',
+      WEBHOOK_SECRET: 'abc',
+      RENDER_EXTERNAL_URL: 'https://zema-games-bot.onrender.com',
+      PORT: '10000',
+      CRON_SECRET: '0123456789abcdef',
+    });
+    expect(c.webhook).toMatchObject({ url: 'https://zema-games-bot.onrender.com', port: 10000, cronSecret: '0123456789abcdef' });
+    expect(() =>
+      loadConfig({ ...base, BOT_MODE: 'webhook', WEBHOOK_SECRET: 'abc', WEBHOOK_URL: 'https://x.dev', CRON_SECRET: 'short' }),
+    ).toThrow(/CRON_SECRET/);
+  });
+});

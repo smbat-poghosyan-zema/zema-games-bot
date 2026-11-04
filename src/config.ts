@@ -8,6 +8,8 @@ export interface WebhookConfig {
   port: number;
   /** Sent by Telegram in X-Telegram-Bot-Api-Secret-Token on every request. */
   secret: string;
+  /** Bearer token for GET /cron/reminder; the endpoint is disabled when unset. */
+  cronSecret?: string;
 }
 
 export interface Config {
@@ -59,18 +61,26 @@ export function loadConfig(env: Env = process.env): Config {
 
   let webhook: WebhookConfig | undefined;
   if (mode === 'webhook') {
-    const url = required(env, 'WEBHOOK_URL').replace(/\/+$/, '');
+    // Render sets RENDER_EXTERNAL_URL automatically, so WEBHOOK_URL is optional there.
+    const rawUrl = env.WEBHOOK_URL?.trim() || env.RENDER_EXTERNAL_URL?.trim();
+    if (!rawUrl) throw new Error('Missing required env variable WEBHOOK_URL');
+    const url = rawUrl.replace(/\/+$/, '');
     if (!url.startsWith('https://')) throw new Error('WEBHOOK_URL must start with https://');
     const secret = required(env, 'WEBHOOK_SECRET');
     if (!/^[A-Za-z0-9_-]{1,256}$/.test(secret)) {
       throw new Error('WEBHOOK_SECRET may only contain A-Z, a-z, 0-9, _ and - (1-256 chars)');
     }
     const path = env.WEBHOOK_PATH?.trim() || '/telegram';
+    const cronSecret = env.CRON_SECRET?.trim();
+    if (cronSecret !== undefined && cronSecret.length > 0 && cronSecret.length < 16) {
+      throw new Error('CRON_SECRET must be at least 16 characters');
+    }
     webhook = {
       url,
       path: path.startsWith('/') ? path : `/${path}`,
       port: intInRange(env, 'PORT', 8080, 1, 65535),
       secret,
+      ...(cronSecret ? { cronSecret } : {}),
     };
   }
 
