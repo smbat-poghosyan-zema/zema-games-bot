@@ -1,4 +1,4 @@
-import { Bot, type Context } from 'grammy';
+import { Bot, type BotConfig, type Context } from 'grammy';
 import type { Config } from './config.js';
 import { gamesListMessage, toPlayer } from './format.js';
 import { PLAY_CALLBACK, type FlowApi, type GameFlow } from './flow.js';
@@ -13,8 +13,9 @@ export function createBot(
   config: Config,
   games: readonly Game[],
   makeFlow: (api: FlowApi) => GameFlow,
+  botConfig?: BotConfig<Context>,
 ): { bot: Bot; flow: GameFlow } {
-  const bot = new Bot(config.token);
+  const bot = new Bot(config.token, botConfig);
   const flow = makeFlow(bot.api);
 
   const isGroup = (ctx: Context) => ctx.chat?.id === config.chatId;
