@@ -16,7 +16,7 @@ export const texts = {
       '/help · այս հաղորդագրությունը',
       '',
       '<b>Ինչպես է աշխատում</b>',
-      `1. /play-ից հետո ${o.joinMinutes} րոպե ունեք միանալու համար։`,
+      `1. /play-ից հետո ${o.joinMinutes} րոպե ունեք միանալու համար։ Եթե արդեն 2+ հոգի եք, սեղմեք «▶️ Սկսել հիմա»։`,
       '2. Ընտրում ենք խաղը՝ ըստ մարդկանց քանակի (եթե տարբերակները շատ են, քվեարկում ենք)։',
       '3. Ես կանչում եմ թիմին, և գնում եք խաղալու 🚀',
       '',
@@ -30,6 +30,12 @@ export const texts = {
   joinPollQuestion: (minutes: number) => `Ո՞վ է խաղում 🎲 Միացեք ${minutes} րոպեի ընթացքում`,
   joinOptionYes: 'Ես խաղում եմ 🙋',
   joinOptionNo: 'Այս անգամ՝ ոչ',
+
+  startNowButton: '▶️ Սկսել հիմա',
+  startNowStarted: 'Սկսում ենք 🚀',
+  startNowTooFew: (min: number) => `Դեռ քիչ ենք 🙂 Պետք է առնվազն ${min} հոգի`,
+  startNowForbidden: 'Սկսել կարող են միայն միացածները 🙂',
+  startNowClosed: 'Այս հարցումն արդեն փակված է',
 
   sessionAlreadyActive: 'Արդեն խաղ է հավաքվում 👆 Միացիր այս հարցմանը։',
   callbackSessionActive: 'Խաղն արդեն հավաքվում է 👆',

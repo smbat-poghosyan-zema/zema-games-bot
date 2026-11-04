@@ -26,7 +26,7 @@ function fakeApi(adminIds: number[] = []) {
       sent.push({ method: 'sendMessage', text, extra });
       return { message_id: nextMessage++ };
     }),
-    sendPoll: vi.fn(async (_chat: number, question: string, options: { text: string }[]) => {
+    sendPoll: vi.fn(async (_chat: number, question: string, options: { text: string }[], _other?: unknown) => {
       const id = nextMessage++;
       sent.push({ method: 'sendPoll', text: question, options: options.map((o) => o.text) });
       return { message_id: id, poll: { id: `poll-${id}` } };
@@ -34,6 +34,7 @@ function fakeApi(adminIds: number[] = []) {
     stopPoll: vi.fn(async () => {
       throw new Error('poll has already been closed');
     }),
+    editMessageReplyMarkup: vi.fn(async () => true),
     getChatMember: vi.fn(async (_chat: number, userId: number) => ({
       status: adminIds.includes(userId) ? 'administrator' : 'member',
     })),
@@ -210,6 +211,65 @@ describe('GameFlow', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe('start now button', () => {
+    it('is attached to the join poll', async () => {
+      const { api } = fakeApi();
+      const flow = makeFlow(api);
+      await flow.start({ id: 1, firstName: 'Ann' });
+      expect(api.sendPoll.mock.calls[0]![3]).toMatchObject({
+        reply_markup: { inline_keyboard: [[{ callback_data: 'start_now', text: texts.startNowButton }]] },
+      });
+    });
+
+    it('closes the join poll early once 2 players joined', async () => {
+      const { api, sent } = fakeApi();
+      const flow = makeFlow(api);
+      await flow.start({ id: 1, firstName: 'Ann' });
+      const joinPoll = flow.session!.join.pollId;
+      await flow.onPollAnswer(answer(joinPoll, user(1, 'ann'), [0]));
+      await flow.onPollAnswer(answer(joinPoll, user(2, 'bob'), [0]));
+      await flow.onPollAnswer(answer(joinPoll, user(3, 'cat'), [0]));
+      api.stopPoll.mockResolvedValueOnce(closed(joinPoll) as never);
+
+      expect(await flow.startNow({ id: 2, firstName: 'Bob' })).toBe('started');
+      expect(api.stopPoll).toHaveBeenCalledWith(CHAT, flow.session!.join.messageId);
+      expect(api.editMessageReplyMarkup).toHaveBeenCalled();
+      expect(flow.session!.stage).toBe('voting');
+      expect(sent.at(-1)!.options).toEqual(['Small', 'Mid']);
+
+      // The `poll` update Telegram sends for the stopped poll changes nothing.
+      await flow.onPoll(closed(joinPoll));
+      expect(flow.session!.stage).toBe('voting');
+      expect(sent.filter((s) => s.method === 'sendPoll')).toHaveLength(2);
+    });
+
+    it('refuses with fewer than 2 players', async () => {
+      const { api } = fakeApi();
+      const flow = makeFlow(api);
+      await flow.start({ id: 1, firstName: 'Ann' });
+      await flow.onPollAnswer(answer(flow.session!.join.pollId, user(1), [0]));
+      expect(await flow.startNow({ id: 1, firstName: 'Ann' })).toBe('tooFew');
+      expect(flow.session!.stage).toBe('joining');
+      expect(api.stopPoll).not.toHaveBeenCalled();
+    });
+
+    it('lets joined players, the starter and admins press it, nobody else', async () => {
+      const { api } = fakeApi([7]);
+      const flow = makeFlow(api);
+      await flow.start({ id: 1, firstName: 'Ann' });
+      const joinPoll = flow.session!.join.pollId;
+      await flow.onPollAnswer(answer(joinPoll, user(2), [0]));
+      await flow.onPollAnswer(answer(joinPoll, user(3), [0]));
+      expect(await flow.startNow({ id: 9, firstName: 'Outsider' })).toBe('forbidden');
+      expect(await flow.startNow({ id: 7, firstName: 'Admin' })).toBe('started');
+    });
+
+    it('says the poll is closed when no join poll is running', async () => {
+      const { api } = fakeApi();
+      expect(await makeFlow(api).startNow({ id: 1, firstName: 'Ann' })).toBe('none');
+    });
   });
 
   it('sends one reminder per day with a play button and skips during a session', async () => {

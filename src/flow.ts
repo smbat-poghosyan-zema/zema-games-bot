@@ -10,7 +10,7 @@ import type { JsonStore, Session } from './store.js';
 import { texts } from './texts.js';
 
 /** The Bot API methods the flow needs; a narrow type keeps tests simple. */
-export type FlowApi = Pick<Api, 'sendMessage' | 'sendPoll' | 'stopPoll' | 'getChatMember'>;
+export type FlowApi = Pick<Api, 'sendMessage' | 'sendPoll' | 'stopPoll' | 'getChatMember' | 'editMessageReplyMarkup'>;
 
 export interface FlowOptions {
   chatId: number;
@@ -25,6 +25,7 @@ export interface FlowOptions {
 
 const HTML = { parse_mode: 'HTML' } as const;
 export const PLAY_CALLBACK = 'play';
+export const START_NOW_CALLBACK = 'start_now';
 
 /**
  * Drives one game session at a time:
@@ -88,7 +89,11 @@ export class GameFlow {
         this.opts.chatId,
         texts.joinPollQuestion(minutes),
         [{ text: texts.joinOptionYes }, { text: texts.joinOptionNo }],
-        { is_anonymous: false, open_period: this.opts.joinPollSeconds },
+        {
+          is_anonymous: false,
+          open_period: this.opts.joinPollSeconds,
+          reply_markup: { inline_keyboard: [[{ text: texts.startNowButton, callback_data: START_NOW_CALLBACK }]] },
+        },
       );
       if (!msg.poll) throw new Error('sendPoll returned no poll');
 
@@ -138,6 +143,27 @@ export class GameFlow {
   onPoll(poll: Poll): Promise<void> {
     if (!poll.is_closed) return Promise.resolve();
     return this.exclusive(() => this.finishPoll(poll.id, poll));
+  }
+
+  /**
+   * Closes the join poll early ("start now" button) once enough players joined.
+   * Joined players, the starter and group admins may do it.
+   */
+  startNow(by: Player): Promise<'started' | 'none' | 'tooFew' | 'forbidden'> {
+    return this.exclusive(async () => {
+      const session = this.session;
+      if (!session || session.stage !== 'joining') return 'none';
+      const allowed =
+        by.id === session.starterId || session.players.some((p) => p.id === by.id) || (await this.isAdmin(by.id));
+      if (!allowed) return 'forbidden';
+      if (session.players.length < MIN_PLAYERS_TO_PLAY) return 'tooFew';
+
+      // stopPoll returns the closed poll; Telegram also sends a `poll` update for it, which
+      // finishPoll ignores because the stage has already moved on.
+      const poll = await this.api.stopPoll(this.opts.chatId, session.join.messageId).catch(() => undefined);
+      await this.finishPoll(session.join.pollId, poll);
+      return 'started';
+    });
   }
 
   cancel(by: Player): Promise<'cancelled' | 'none' | 'forbidden'> {
@@ -212,6 +238,8 @@ export class GameFlow {
   private async finishJoin(session: Session): Promise<void> {
     const players = session.players;
     const plan = planAfterJoin(this.games, players.length);
+    // Drop the "start now" button from the closed join poll.
+    await this.api.editMessageReplyMarkup(this.opts.chatId, session.join.messageId).catch(() => undefined);
     const chatId = this.opts.chatId;
 
     switch (plan.kind) {

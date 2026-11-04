@@ -1,9 +1,10 @@
 import { Bot, type BotConfig, type Context } from 'grammy';
 import type { Config } from './config.js';
 import { gamesListMessage, toPlayer } from './format.js';
-import { PLAY_CALLBACK, type FlowApi, type GameFlow } from './flow.js';
+import { PLAY_CALLBACK, START_NOW_CALLBACK, type FlowApi, type GameFlow } from './flow.js';
 import type { Game } from './games.js';
 import { log } from './log.js';
+import { MIN_PLAYERS_TO_PLAY } from './plan.js';
 import { texts } from './texts.js';
 
 /** Update types the bot needs; also passed to getUpdates/setWebhook. */
@@ -61,6 +62,19 @@ export function createBot(
     await ctx.answerCallbackQuery({
       text: result === 'started' ? texts.callbackStarted : texts.callbackSessionActive,
     });
+  });
+
+  // "Start now" button under the join poll.
+  bot.callbackQuery(START_NOW_CALLBACK, async (ctx) => {
+    if (!isGroup(ctx)) return void (await ctx.answerCallbackQuery());
+    const result = await flow.startNow(toPlayer(ctx.from));
+    const reply = {
+      started: { text: texts.startNowStarted },
+      tooFew: { text: texts.startNowTooFew(MIN_PLAYERS_TO_PLAY), show_alert: true },
+      forbidden: { text: texts.startNowForbidden, show_alert: true },
+      none: { text: texts.startNowClosed },
+    }[result];
+    await ctx.answerCallbackQuery(reply);
   });
 
   bot.on('poll_answer', (ctx) => flow.onPollAnswer(ctx.pollAnswer));

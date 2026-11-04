@@ -11,6 +11,8 @@ All bot texts are Armenian and live in [`src/texts.ts`](src/texts.ts).
 
 1. `/play` in the group (or the **🎲 Սկսել խաղը** button under the daily reminder) posts a native,
    non-anonymous poll that closes after 5 minutes. Only one session can run at a time.
+   Once at least 2 people joined, the **▶️ Սկսել հիմա** (start now) button under the poll closes it
+   early. Joined players, the starter and group admins can press it.
 2. When Telegram closes the poll:
    - fewer than 2 players: the session is cancelled;
    - exactly one game fits the player count: it's announced right away;
