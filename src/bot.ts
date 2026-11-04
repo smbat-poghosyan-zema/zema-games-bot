@@ -3,6 +3,7 @@ import type { Config } from './config.js';
 import { gamesListMessage, toPlayer } from './format.js';
 import { PLAY_CALLBACK, type FlowApi, type GameFlow } from './flow.js';
 import type { Game } from './games.js';
+import { log } from './log.js';
 import { texts } from './texts.js';
 
 /** Update types the bot needs; also passed to getUpdates/setWebhook. */
@@ -62,10 +63,7 @@ export function createBot(
   bot.on('poll_answer', (ctx) => flow.onPollAnswer(ctx.pollAnswer));
   bot.on('poll', (ctx) => flow.onPoll(ctx.poll));
 
-  bot.catch((err) => {
-    const e = err.error as Error | undefined;
-    console.error(`[bot] error while handling update ${err.ctx.update.update_id}:`, e?.message ?? e);
-  });
+  bot.catch((err) => log.error(`[bot] error while handling update ${err.ctx.update.update_id}:`, err.error));
 
   return { bot, flow };
 }

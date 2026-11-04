@@ -1,4 +1,5 @@
 import { Cron } from 'croner';
+import { log } from './log.js';
 
 export interface ReminderConfig {
   enabled: boolean;
@@ -35,7 +36,7 @@ export function createReminderJob(config: ReminderConfig, run?: () => Promise<vo
   const options = {
     timezone: config.timezone,
     protect: true,
-    catch: (err: unknown) => console.error('[reminder] job failed:', err),
+    catch: (err: unknown) => log.error('[reminder] job failed:', err),
     paused: !run,
   };
   const pattern = reminderCronPattern(config);

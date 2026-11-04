@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Player } from './format.js';
+import { log } from './log.js';
 
 export interface PollRef {
   pollId: string;
@@ -55,7 +56,7 @@ export class JsonStore {
       const parsed = JSON.parse(readFileSync(file, 'utf8')) as State;
       return { ...structuredClone(EMPTY), ...parsed };
     } catch (err) {
-      console.error(`[store] could not read ${file}, starting empty:`, err);
+      log.error(`[store] could not read ${file}, starting empty:`, err);
       return structuredClone(EMPTY);
     }
   }

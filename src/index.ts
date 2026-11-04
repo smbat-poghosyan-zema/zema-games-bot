@@ -5,11 +5,13 @@ import { ALLOWED_UPDATES, createBot, registerCommands } from './bot.js';
 import { loadConfig } from './config.js';
 import { GameFlow } from './flow.js';
 import { loadGames } from './games.js';
+import { installProcessErrorHandlers, log } from './log.js';
 import { createReminderJob } from './schedule.js';
 import { JsonStore } from './store.js';
 
 // Local dev convenience: read .env if present (production passes real env vars).
 if (existsSync('.env')) process.loadEnvFile('.env');
+installProcessErrorHandlers();
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -30,17 +32,17 @@ async function main(): Promise<void> {
   flow.resume();
 
   await bot.init();
-  console.log(`[bot] @${bot.botInfo.username} starting in ${config.mode} mode, ${games.length} games loaded`);
-  await registerCommands(bot, config.chatId).catch((err) => console.warn('[bot] setMyCommands failed:', err.message));
+  log.info(`[bot] @${bot.botInfo.username} starting in ${config.mode} mode, ${games.length} games loaded`);
+  await registerCommands(bot, config.chatId).catch((err) => log.warn('[bot] setMyCommands failed:', err));
 
   const reminder = config.reminder.enabled
     ? createReminderJob(config.reminder, async () => {
         const result = await flow.sendReminder();
-        console.log(`[reminder] ${result}`);
+        log.info(`[reminder] ${result}`);
       })
     : undefined;
   if (reminder) {
-    console.log(`[reminder] next at ${reminder.nextRun()?.toISOString()} (${config.reminder.days} ${config.reminder.time} ${config.reminder.timezone})`);
+    log.info(`[reminder] next at ${reminder.nextRun()?.toISOString()} (${config.reminder.days} ${config.reminder.time} ${config.reminder.timezone})`);
   }
 
   let shutdown: () => Promise<void>;
@@ -59,21 +61,24 @@ async function main(): Promise<void> {
       allowed_updates: [...ALLOWED_UPDATES],
       max_connections: 1,
     });
-    console.log(`[bot] webhook set, listening on :${wh.port}${wh.path}`);
+    log.info(`[bot] webhook set, listening on :${wh.port}${wh.path}`);
     shutdown = async () => void server.close();
   } else {
     // Long polling needs the webhook removed; pending updates are kept so a restart
     // still receives poll closes that happened while the bot was down.
     await bot.api.deleteWebhook();
-    void bot.start({ allowed_updates: [...ALLOWED_UPDATES] });
+    bot.start({ allowed_updates: [...ALLOWED_UPDATES] }).catch((err) => {
+      log.error('[bot] polling stopped with an error:', err);
+      process.exit(1);
+    });
     shutdown = () => bot.stop();
   }
 
   const stop = async (signal: string) => {
-    console.log(`[bot] ${signal} received, shutting down`);
+    log.info(`[bot] ${signal} received, shutting down`);
     reminder?.stop();
     flow.stop();
-    await shutdown();
+    await shutdown().catch((err) => log.warn('[bot] error during shutdown:', err));
     process.exit(0);
   };
   process.once('SIGINT', () => void stop('SIGINT'));
@@ -81,6 +86,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  console.error('[bot] fatal:', err instanceof Error ? err.message : err);
+  log.error('[bot] fatal:', err);
   process.exit(1);
 });

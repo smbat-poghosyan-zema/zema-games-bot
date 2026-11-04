@@ -5,6 +5,7 @@ import type { Game } from './games.js';
 import { escapeHtml, gameNames, mention, mentionAll, teamReadyMessage, toPlayer, type Player } from './format.js';
 import { dealIntoGroups, MIN_PLAYERS_TO_PLAY, planAfterJoin, resolveVote, type Rng } from './plan.js';
 import { localDateKey } from './schedule.js';
+import { log } from './log.js';
 import type { JsonStore, Session } from './store.js';
 import { texts } from './texts.js';
 
@@ -312,10 +313,10 @@ export class GameFlow {
         const current = this.session;
         const currentRef = current?.stage === 'voting' ? current.vote : current?.join;
         if (!currentRef || currentRef.pollId !== ref.pollId) return;
-        console.warn(`[flow] no close update for poll ${ref.pollId}, finalizing via fallback`);
+        log.warn(`[flow] no close update for poll ${ref.pollId}, finalizing via fallback`);
         const poll = await this.api.stopPoll(this.opts.chatId, ref.messageId).catch(() => undefined);
         await this.finishPoll(ref.pollId, poll);
-      }).catch((err) => console.error('[flow] fallback failed:', err));
+      }).catch((err) => log.error('[flow] fallback failed:', err));
     }, delay);
     this.fallbackTimer.unref?.();
   }
