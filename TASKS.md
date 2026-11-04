@@ -1,16 +1,22 @@
 # TASKS
 
 - [x] git init, .gitignore, package.json, TypeScript/ESLint/Vitest config
-- [ ] Confirm Bot API poll-close updates and allowed_updates
-- [ ] games.json with sourced player counts and durations
-- [ ] Texts module (Armenian)
-- [ ] Core logic: game filtering, plan (too few / single / vote / split), tie-break
-- [ ] Reminder schedule (env-configurable, Asia/Yerevan) with tests
-- [ ] JSON session store (atomic writes, survives restarts)
-- [ ] Bot handlers: /play, /cancel, /games, /help, reminder button, poll + poll_answer
-- [ ] Fallback finalizer if a poll-closed update never arrives
-- [ ] Long polling (dev) and webhook (prod) modes
-- [ ] Dockerfile + deploy config for chosen host
-- [ ] README (setup, env, games.json, reminder, deploy)
-- [ ] npm run build / lint / test pass
-- [ ] Local run: /help and /games in a private chat
+- [x] Confirm Bot API poll-close updates and allowed_updates (poll + poll_answer, 24h update retention)
+- [x] games.json with sourced player counts and durations
+- [x] Texts module (Armenian)
+- [x] Core logic: game filtering, plan (too few / single / vote / split), tie-break
+- [x] Reminder schedule (env-configurable, Asia/Yerevan) with tests
+- [x] JSON session store (atomic writes, survives restarts)
+- [x] Bot handlers: /play, /cancel, /games, /help, reminder button, poll + poll_answer
+- [x] Fallback finalizer if a poll-closed update never arrives
+- [x] Long polling (dev) and webhook (prod) modes
+- [x] Dockerfile + deploy config for chosen host (Oracle Cloud Always Free, Compose + Caddy)
+- [x] README (setup, env, games.json, reminder, deploy)
+- [x] npm run build / lint / test pass
+- [x] Local run: bot starts in polling mode (npm run dev and Docker); /help and /games covered by handler tests
+- [x] Found: grammY network errors printed the token in the URL; added redacting logger
+- [ ] Manual: /help and /games from a real private chat (needs a human to send them)
+- [ ] Manual: first real /play in the group (needs approval before posting there)
+- [ ] Verify Gartic Phone min/max players in a real lobby and update games.json
+- [ ] Make the bot a group admin (privacy mode) before production
+- [ ] Deploy to Oracle Cloud (needs account)
