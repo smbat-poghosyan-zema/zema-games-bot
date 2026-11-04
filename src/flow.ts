@@ -2,8 +2,17 @@ import { randomUUID } from 'node:crypto';
 import type { Api } from 'grammy';
 import type { Poll, PollAnswer } from 'grammy/types';
 import type { Game } from './games.js';
-import { escapeHtml, gameNames, mention, mentionAll, teamReadyMessage, toPlayer, type Player } from './format.js';
-import { dealIntoGroups, MIN_PLAYERS_TO_PLAY, planAfterJoin, resolveVote, type Rng } from './plan.js';
+import {
+  escapeHtml,
+  gameNames,
+  mention,
+  mentionAll,
+  playersRange,
+  teamReadyMessage,
+  toPlayer,
+  type Player,
+} from './format.js';
+import { dealIntoGroups, MIN_PLAYERS_TO_PLAY, planAfterJoin, requiredPlayers, resolveVote, type Rng } from './plan.js';
 import { localDateKey } from './schedule.js';
 import { log } from './log.js';
 import type { JsonStore, Session } from './store.js';
@@ -73,7 +82,17 @@ export class GameFlow {
     clearTimeout(this.fallbackTimer);
   }
 
-  start(starter: Player): Promise<'started' | 'active'> {
+  /** Players needed to start the active session early (the chosen game's minimum, or 2). */
+  requiredPlayersNow(): number {
+    return requiredPlayers(this.chosenGame(this.session));
+  }
+
+  private chosenGame(session: Session | null): Game | undefined {
+    return session?.chosenGame ? this.games.find((g) => g.name === session.chosenGame) : undefined;
+  }
+
+  /** Starts a session; with `game` (from /play <game>) the game vote is skipped. */
+  start(starter: Player, game?: Game): Promise<'started' | 'active'> {
     return this.exclusive(async () => {
       const active = this.session;
       if (active) {
@@ -87,7 +106,7 @@ export class GameFlow {
       const minutes = Math.round(this.opts.joinPollSeconds / 60);
       const msg = await this.api.sendPoll(
         this.opts.chatId,
-        texts.joinPollQuestion(minutes),
+        game ? texts.joinPollQuestionForGame(game.name, playersRange(game), minutes) : texts.joinPollQuestion(minutes),
         [{ text: texts.joinOptionYes }, { text: texts.joinOptionNo }],
         {
           is_anonymous: false,
@@ -109,6 +128,7 @@ export class GameFlow {
             messageId: msg.message_id,
             closesAt: this.closesAt(this.opts.joinPollSeconds),
           },
+          ...(game ? { chosenGame: game.name } : {}),
           players: [],
         };
       });
@@ -156,7 +176,7 @@ export class GameFlow {
       const allowed =
         by.id === session.starterId || session.players.some((p) => p.id === by.id) || (await this.isAdmin(by.id));
       if (!allowed) return 'forbidden';
-      if (session.players.length < MIN_PLAYERS_TO_PLAY) return 'tooFew';
+      if (session.players.length < requiredPlayers(this.chosenGame(session))) return 'tooFew';
 
       // stopPoll returns the closed poll; Telegram also sends a `poll` update for it, which
       // finishPoll ignores because the stage has already moved on.
@@ -237,7 +257,8 @@ export class GameFlow {
 
   private async finishJoin(session: Session): Promise<void> {
     const players = session.players;
-    const plan = planAfterJoin(this.games, players.length);
+    const chosen = this.chosenGame(session);
+    const plan = planAfterJoin(this.games, players.length, chosen);
     // Drop the "start now" button from the closed join poll.
     await this.api.editMessageReplyMarkup(this.opts.chatId, session.join.messageId).catch(() => undefined);
     const chatId = this.opts.chatId;
@@ -248,14 +269,22 @@ export class GameFlow {
         await this.api.sendMessage(chatId, texts.tooFew(MIN_PLAYERS_TO_PLAY), HTML);
         return;
 
-      case 'single':
+      case 'tooFewForGame':
         this.clearSession();
         await this.api.sendMessage(
           chatId,
-          `${texts.singleGame(players.length, escapeHtml(plan.game.name))}\n\n${teamReadyMessage(plan.game, players)}`,
+          texts.tooFewForGame(escapeHtml(plan.game.name), requiredPlayers(plan.game), players.length),
           HTML,
         );
         return;
+
+      case 'single': {
+        this.clearSession();
+        const ready = teamReadyMessage(plan.game, players);
+        const text = chosen ? ready : `${texts.singleGame(players.length, escapeHtml(plan.game.name))}\n\n${ready}`;
+        await this.api.sendMessage(chatId, text, HTML);
+        return;
+      }
 
       case 'vote': {
         const minutes = Math.round(this.opts.gamePollSeconds / 60);
@@ -287,7 +316,10 @@ export class GameFlow {
         const parts = plan.groups.map((g, i) =>
           texts.splitGroup({ index: i + 1, size: g.size, mentions: mentionAll(groups[i]!), games: gameNames(g.games) }),
         );
-        await this.api.sendMessage(chatId, [texts.splitIntro(players.length), ...parts, texts.splitOutro].join('\n\n'), HTML);
+        const intro = chosen
+          ? texts.splitIntroForGame(escapeHtml(chosen.name), players.length, chosen.maxPlayers)
+          : texts.splitIntro(players.length);
+        await this.api.sendMessage(chatId, [intro, ...parts, texts.splitOutro].join('\n\n'), HTML);
         return;
       }
 

@@ -11,6 +11,7 @@ export const texts = {
       '',
       '<b>Հրամաններ</b>',
       '/play · սկսել նոր խաղ',
+      '/play Azul · սկսել կոնկրետ խաղով (առանց քվեարկության)',
       '/games · մեր խաղերի ցանկը',
       '/cancel · չեղարկել ընթացիկ խաղը (սկսողը կամ ադմինը)',
       '/help · այս հաղորդագրությունը',
@@ -28,12 +29,21 @@ export const texts = {
 
   // Join poll (plain text)
   joinPollQuestion: (minutes: number) => `Ո՞վ է խաղում 🎲 Միացեք ${minutes} րոպեի ընթացքում`,
+  joinPollQuestionForGame: (game: string, players: string, minutes: number) =>
+    `Խաղում ենք ${game} (${players} հոգի) 🎲 Ո՞վ է միանում։ Միացեք ${minutes} րոպեի ընթացքում`,
   joinOptionYes: 'Ես խաղում եմ 🙋',
   joinOptionNo: 'Այս անգամ՝ ոչ',
 
   startNowButton: '▶️ Սկսել հիմա',
   startNowStarted: 'Սկսում ենք 🚀',
   startNowTooFew: (min: number) => `Դեռ քիչ ենք 🙂 Պետք է առնվազն ${min} հոգի`,
+
+  gameNotFound: (names: string) => `Այդպիսի խաղ չգտա 🤔 Ընտրիր սրանցից՝ ${names}`,
+  gameAmbiguous: (names: string) => `Մի քանի խաղ է համապատասխանում՝ ${names}։ Գրիր ավելի ճշգրիտ 🙂`,
+  tooFewForGame: (game: string, min: number, joined: number) =>
+    `${game}-ի համար պետք է առնվազն ${min} հոգի, իսկ միացել է ${joined}-ը 😅 Խաղը չեղարկվեց, փորձեք մեկ այլ խաղ կամ /play`,
+  splitIntroForGame: (game: string, players: number, max: number) =>
+    `Վա՜յ, ${players} հոգի ենք 🎉 ${game}-ը մինչև ${max} հոգու համար է, բաժանվենք խմբերի՝`,
   startNowForbidden: 'Սկսել կարող են միայն միացածները 🙂',
   startNowClosed: 'Այս հարցումն արդեն փակված է',
 

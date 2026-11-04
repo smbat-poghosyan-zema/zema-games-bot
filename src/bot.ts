@@ -1,10 +1,9 @@
 import { Bot, type BotConfig, type Context } from 'grammy';
 import type { Config } from './config.js';
-import { gamesListMessage, toPlayer } from './format.js';
+import { escapeHtml, gamesListMessage, toPlayer } from './format.js';
 import { PLAY_CALLBACK, START_NOW_CALLBACK, type FlowApi, type GameFlow } from './flow.js';
-import type { Game } from './games.js';
+import { findGames, type Game } from './games.js';
 import { log } from './log.js';
-import { MIN_PLAYERS_TO_PLAY } from './plan.js';
 import { texts } from './texts.js';
 
 /** Update types the bot needs; also passed to getUpdates/setWebhook. */
@@ -44,7 +43,16 @@ export function createBot(
   bot.command('play', async (ctx) => {
     if (!isGroup(ctx)) return void (await ctx.reply(texts.playOnlyInGroup));
     if (!ctx.from) return;
-    await flow.start(toPlayer(ctx.from));
+
+    // "/play Azul" starts with that game and skips the vote.
+    const query = ctx.match.trim();
+    if (!query) return void (await flow.start(toPlayer(ctx.from)));
+    const matches = findGames(games, query);
+    if (matches.length === 1) return void (await flow.start(toPlayer(ctx.from), matches[0]));
+    const names = (matches.length > 1 ? matches : games).map((g) => escapeHtml(g.name)).join(', ');
+    await ctx.reply(matches.length > 1 ? texts.gameAmbiguous(names) : texts.gameNotFound(names), {
+      parse_mode: 'HTML',
+    });
   });
 
   bot.command('cancel', async (ctx) => {
@@ -70,7 +78,7 @@ export function createBot(
     const result = await flow.startNow(toPlayer(ctx.from));
     const reply = {
       started: { text: texts.startNowStarted },
-      tooFew: { text: texts.startNowTooFew(MIN_PLAYERS_TO_PLAY), show_alert: true },
+      tooFew: { text: texts.startNowTooFew(flow.requiredPlayersNow()), show_alert: true },
       forbidden: { text: texts.startNowForbidden, show_alert: true },
       none: { text: texts.startNowClosed },
     }[result];

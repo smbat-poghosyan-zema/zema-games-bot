@@ -10,6 +10,7 @@ export interface SplitGroup {
 /** What to do once the join poll has closed. */
 export type JoinPlan =
   | { kind: 'tooFew' }
+  | { kind: 'tooFewForGame'; game: Game }
   | { kind: 'single'; game: Game }
   | { kind: 'vote'; games: Game[] }
   | { kind: 'split'; groups: SplitGroup[] }
@@ -35,7 +36,24 @@ export function planSplit(games: readonly Game[], players: number): SplitGroup[]
   return null;
 }
 
-export function planAfterJoin(games: readonly Game[], players: number): JoinPlan {
+/** Players needed before a session can start: the chosen game's minimum, or 2. */
+export function requiredPlayers(chosen?: Game): number {
+  return Math.max(MIN_PLAYERS_TO_PLAY, chosen?.minPlayers ?? 0);
+}
+
+/**
+ * Decides what happens after the join poll. With a `chosen` game (/play Azul) there is no
+ * vote: the game is played if the count fits, otherwise the players are split into groups
+ * that fit it, or the session is cancelled when too few joined.
+ */
+export function planAfterJoin(games: readonly Game[], players: number, chosen?: Game): JoinPlan {
+  if (chosen) {
+    if (players < requiredPlayers(chosen)) return { kind: 'tooFewForGame', game: chosen };
+    if (players <= chosen.maxPlayers) return { kind: 'single', game: chosen };
+    const groups = planSplit([chosen], players);
+    return groups ? { kind: 'split', groups } : { kind: 'noFit' };
+  }
+
   if (players < MIN_PLAYERS_TO_PLAY) return { kind: 'tooFew' };
 
   const fitting = gamesForPlayers(games, players);

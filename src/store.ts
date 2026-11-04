@@ -24,6 +24,8 @@ export interface Session {
   startedAt: string;
   stage: 'joining' | 'voting';
   join: PollRef;
+  /** Game picked up front with /play <game>; skips the game vote. */
+  chosenGame?: string;
   /** Players who chose "I'm in", in join order. */
   players: Player[];
   vote?: VoteStage;

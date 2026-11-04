@@ -272,6 +272,64 @@ describe('GameFlow', () => {
     });
   });
 
+  describe('chosen game (/play <game>)', () => {
+    const mid = games.find((g) => g.name === 'Mid')!;
+
+    async function joinPlayers(flow: GameFlow, ids: number[]) {
+      const joinPoll = flow.session!.join.pollId;
+      for (const id of ids) await flow.onPollAnswer(answer(joinPoll, user(id, `u${id}`), [0]));
+      return joinPoll;
+    }
+
+    it('names the game in the poll and skips the vote', async () => {
+      const { api, sent } = fakeApi();
+      const flow = makeFlow(api);
+      await flow.start({ id: 1, firstName: 'Ann' }, mid);
+      expect(sent[0]!.text).toBe(texts.joinPollQuestionForGame('Mid', '3-6', 5));
+      expect(flow.session!.chosenGame).toBe('Mid');
+
+      const joinPoll = await joinPlayers(flow, [1, 2, 3]);
+      await flow.onPoll(closed(joinPoll));
+      expect(flow.session).toBeNull();
+      expect(sent.filter((s) => s.method === 'sendPoll')).toHaveLength(1);
+      expect(sent.at(-1)!.text).toBe(
+        texts.teamReady({ game: 'Mid', mentions: '@u1, @u2, @u3' }),
+      );
+    });
+
+    it('cancels when fewer than the game minimum joined', async () => {
+      const { api, sent } = fakeApi();
+      const flow = makeFlow(api);
+      await flow.start({ id: 1, firstName: 'Ann' }, mid);
+      const joinPoll = await joinPlayers(flow, [1, 2]);
+      await flow.onPoll(closed(joinPoll));
+      expect(flow.session).toBeNull();
+      expect(sent.at(-1)!.text).toBe(texts.tooFewForGame('Mid', 3, 2));
+    });
+
+    it('splits into groups for that game when too many joined', async () => {
+      const { api, sent } = fakeApi();
+      const flow = makeFlow(api);
+      await flow.start({ id: 1, firstName: 'Ann' }, mid);
+      const joinPoll = await joinPlayers(flow, [1, 2, 3, 4, 5, 6, 7, 8]);
+      await flow.onPoll(closed(joinPoll));
+      expect(sent.at(-1)!.text).toContain(texts.splitIntroForGame('Mid', 8, 6));
+      expect(sent.at(-1)!.text).toContain('(4 հոգի)');
+    });
+
+    it('start now needs the game minimum', async () => {
+      const { api } = fakeApi();
+      const flow = makeFlow(api);
+      await flow.start({ id: 1, firstName: 'Ann' }, mid);
+      await joinPlayers(flow, [1, 2]);
+      expect(flow.requiredPlayersNow()).toBe(3);
+      expect(await flow.startNow({ id: 1, firstName: 'Ann' })).toBe('tooFew');
+      await joinPlayers(flow, [3]);
+      expect(await flow.startNow({ id: 1, firstName: 'Ann' })).toBe('started');
+      expect(flow.session).toBeNull();
+    });
+  });
+
   it('sends one reminder per day with a play button and skips during a session', async () => {
     const { api, sent } = fakeApi();
     const flow = makeFlow(api, seq(0));

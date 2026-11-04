@@ -23,7 +23,12 @@ All bot texts are Armenian and live in [`src/texts.ts`](src/texts.ts).
 3. The final message names the game (plus the link for online games) and mentions every player
    (`@username`, or a text mention when the user has no username).
 
-Commands: `/play`, `/games`, `/cancel` (session starter or a group admin), `/help`.
+Commands: `/play`, `/play <game>`, `/games`, `/cancel` (session starter or a group admin), `/help`.
+
+`/play <game>` (e.g. `/play Azul`, `/play kittens`; case-insensitive, partial names work) starts a
+session for that game and skips the vote. When the poll closes: fewer than the game's minimum cancels,
+within its range announces the team, more than its maximum splits everyone into groups for that game.
+The start now button then needs the game's minimum instead of 2.
 In private chats only `/help`, `/start` and `/games` work. Other groups are ignored.
 
 ### Why it survives restarts

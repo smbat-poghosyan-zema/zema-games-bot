@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { gamesForPlayers, loadGames, parseGames } from '../src/games.js';
-import { balancedSizes, dealIntoGroups, planAfterJoin, planSplit, resolveVote } from '../src/plan.js';
+import { findGames, gamesForPlayers, loadGames, parseGames } from '../src/games.js';
+import { balancedSizes, dealIntoGroups, planAfterJoin, planSplit, requiredPlayers, resolveVote } from '../src/plan.js';
 import { game, seq } from './helpers.js';
 
 const games = [game('Duo', 2, 2), game('Small', 2, 4), game('Mid', 3, 6), game('Party', 4, 8)];
@@ -63,6 +63,52 @@ describe('planAfterJoin', () => {
     expect(planAfterJoin(real, 3).kind).toBe('vote');
     const huge = planAfterJoin(real, 31);
     expect(huge.kind).toBe('split');
+  });
+});
+
+describe('planAfterJoin with a chosen game', () => {
+  const mid = games.find((g) => g.name === 'Mid')!;
+
+  it('plays the chosen game when the count fits, without a vote', () => {
+    expect(planAfterJoin(games, 4, mid)).toMatchObject({ kind: 'single', game: { name: 'Mid' } });
+    expect(planAfterJoin(games, 6, mid)).toMatchObject({ kind: 'single', game: { name: 'Mid' } });
+  });
+
+  it('cancels when fewer than the game minimum joined', () => {
+    expect(planAfterJoin(games, 2, mid)).toMatchObject({ kind: 'tooFewForGame', game: { name: 'Mid' } });
+    expect(planAfterJoin(games, 1, mid).kind).toBe('tooFewForGame');
+  });
+
+  it('splits into groups of the chosen game when too many joined', () => {
+    const plan = planAfterJoin(games, 10, mid);
+    expect(plan.kind).toBe('split');
+    if (plan.kind === 'split') {
+      expect(plan.groups.map((g) => g.size)).toEqual([5, 5]);
+      expect(plan.groups.every((g) => names(g.games).join() === 'Mid')).toBe(true);
+    }
+  });
+
+  it('needs the game minimum (at least 2) to start early', () => {
+    expect(requiredPlayers()).toBe(2);
+    expect(requiredPlayers(mid)).toBe(3);
+    expect(requiredPlayers(games[0])).toBe(2);
+  });
+});
+
+describe('findGames', () => {
+  const real = loadGames();
+  it('matches case-insensitively, ignoring spaces, and accepts partial names', () => {
+    expect(names(findGames(real, 'azul'))).toEqual(['Azul']);
+    expect(names(findGames(real, 'Exploding kittens'))).toEqual(['Exploding Kittens']);
+    expect(names(findGames(real, 'kittens'))).toEqual(['Exploding Kittens']);
+    expect(names(findGames(real, 'SPOT IT'))).toEqual(['Spot it']);
+    expect(names(findGames(real, 'gartic'))).toEqual(['Gartic Phone']);
+  });
+
+  it('returns several matches for an ambiguous query and none for unknown or empty', () => {
+    expect(findGames(real, 'o').length).toBeGreaterThan(1);
+    expect(findGames(real, 'chess')).toEqual([]);
+    expect(findGames(real, '  ')).toEqual([]);
   });
 });
 

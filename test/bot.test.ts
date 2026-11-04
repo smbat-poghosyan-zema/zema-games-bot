@@ -89,6 +89,20 @@ describe('bot handlers', () => {
     });
   });
 
+  it('starts with a chosen game on /play <name>', async () => {
+    await bot.handleUpdate(message({ id: GROUP, type: 'supergroup' }, '/play@ZemaGamesBot exploding kittens'));
+    expect(calls[0]).toMatchObject({ method: 'sendPoll' });
+    expect(String(calls[0]!.payload.question)).toContain('Exploding Kittens (2-10 հոգի)');
+  });
+
+  it('lists the games when /play <name> matches nothing', async () => {
+    await bot.handleUpdate(message({ id: GROUP, type: 'supergroup' }, '/play chess'));
+    expect(calls[0]!.method).toBe('sendMessage');
+    expect(String(calls[0]!.payload.text)).toBe(
+      texts.gameNotFound('Blokus, Azul, Exploding Kittens, Spot it, Gartic Phone'),
+    );
+  });
+
   it('ignores other groups', async () => {
     await bot.handleUpdate(message({ id: -100999, type: 'supergroup' }, '/help'));
     await bot.handleUpdate(message({ id: -100999, type: 'supergroup' }, '/play'));

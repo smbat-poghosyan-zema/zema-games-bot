@@ -55,6 +55,19 @@ export function loadGames(path = DEFAULT_GAMES_PATH): Game[] {
   return parseGames(JSON.parse(readFileSync(path, 'utf8')));
 }
 
+const normalize = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+
+/**
+ * Finds games by a user-typed name: case-insensitive, ignores spaces and punctuation,
+ * accepts partial names ("kittens", "spot"). An exact match wins over partial ones.
+ */
+export function findGames(games: readonly Game[], query: string): Game[] {
+  const q = normalize(query);
+  if (!q) return [];
+  const exact = games.filter((g) => normalize(g.name) === q);
+  return exact.length > 0 ? exact : games.filter((g) => normalize(g.name).includes(q));
+}
+
 /** Games that can be played by exactly `players` people. */
 export function gamesForPlayers(games: readonly Game[], players: number): Game[] {
   return games.filter((g) => g.minPlayers <= players && players <= g.maxPlayers);
