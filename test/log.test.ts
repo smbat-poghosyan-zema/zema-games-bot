@@ -3,7 +3,9 @@ import { redact } from '../src/log.js';
 
 describe('redact', () => {
   it('removes bot tokens from URLs and messages', () => {
-    const url = 'request to https://api.telegram.org/bot1234567890:AAE6abcdefghijklmnopqrstuvwxyz_-123/getUpdates failed';
+    // Built at runtime so secret scanners don't mistake the fixture for a real token.
+    const fakeToken = `${'1'.repeat(10)}:${'x'.repeat(35)}`;
+    const url = `request to https://api.telegram.org/bot${fakeToken}/getUpdates failed`;
     expect(redact(url)).toBe('request to https://api.telegram.org/bot<redacted-token>/getUpdates failed');
   });
 
