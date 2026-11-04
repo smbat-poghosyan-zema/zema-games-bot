@@ -21,4 +21,7 @@
 - [ ] Manual: /help from a private chat
 - [ ] Verify Gartic Phone min/max players in a real lobby and update games.json
 - [ ] Make the bot a group admin (privacy mode) before production
-- [ ] Push to GitHub, deploy Render Blueprint, set up cron-job.org (needs accounts)
+- [x] Pushed to GitHub (public): smbat-poghosyan-zema/zema-games-bot
+- [x] Render free web service live: https://zema-games-bot.onrender.com (webhook set, /healthz ok)
+- [x] cron-job.org jobs: keep warm (Mon-Fri 09:00-18:50, every 10 min) and reminder (Mon-Fri 14:00 + 14:10), Asia/Yerevan
+- [ ] Confirm first automatic reminder on Thu 2026-11-05 14:00
