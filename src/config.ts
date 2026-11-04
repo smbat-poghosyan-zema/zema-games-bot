@@ -99,8 +99,8 @@ export function loadConfig(env: Env = process.env): Config {
     mode,
     webhook,
     dataFile: env.DATA_FILE?.trim() || 'data/state.json',
-    joinPollSeconds: intInRange(env, 'JOIN_POLL_SECONDS', 300, 5, 600),
-    gamePollSeconds: intInRange(env, 'GAME_POLL_SECONDS', 120, 5, 600),
+    joinPollSeconds: intInRange(env, 'JOIN_POLL_SECONDS', 600, 5, 3600),
+    gamePollSeconds: intInRange(env, 'GAME_POLL_SECONDS', 300, 5, 3600),
     reminder,
   };
 }

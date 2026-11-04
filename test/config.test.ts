@@ -9,8 +9,8 @@ describe('loadConfig', () => {
     expect(c).toMatchObject({
       chatId: -100123,
       mode: 'polling',
-      joinPollSeconds: 300,
-      gamePollSeconds: 120,
+      joinPollSeconds: 600,
+      gamePollSeconds: 300,
       reminder: { enabled: true, time: '14:00', days: 'MON-FRI', timezone: 'Asia/Yerevan' },
     });
   });

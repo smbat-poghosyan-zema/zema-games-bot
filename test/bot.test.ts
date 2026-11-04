@@ -30,8 +30,8 @@ describe('bot handlers', () => {
       (api) =>
         new GameFlow(api, new JsonStore(join(dir, 'state.json')), games, {
           chatId: GROUP,
-          joinPollSeconds: 300,
-          gamePollSeconds: 120,
+          joinPollSeconds: 600,
+          gamePollSeconds: 300,
           timezone: 'Asia/Yerevan',
         }),
       { botInfo },
@@ -81,11 +81,11 @@ describe('bot handlers', () => {
     expect(calls[0]!.payload.text).toBe(texts.playOnlyInGroup);
   });
 
-  it('starts a non-anonymous 5-minute poll on /play@ZemaGamesBot in the group', async () => {
+  it('starts a non-anonymous 10-minute poll on /play@ZemaGamesBot in the group', async () => {
     await bot.handleUpdate(message({ id: GROUP, type: 'supergroup' }, '/play@ZemaGamesBot'));
     expect(calls[0]).toMatchObject({
       method: 'sendPoll',
-      payload: { chat_id: GROUP, is_anonymous: false, open_period: 300 },
+      payload: { chat_id: GROUP, is_anonymous: false, open_period: 600 },
     });
   });
 

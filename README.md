@@ -10,13 +10,13 @@ All bot texts are Armenian and live in [`src/texts.ts`](src/texts.ts).
 ## How a session works
 
 1. `/play` in the group (or the **🎲 Սկսել խաղը** button under the daily reminder) posts a native,
-   non-anonymous poll that closes after 5 minutes. Only one session can run at a time.
+   non-anonymous poll that closes after 10 minutes. Only one session can run at a time.
    Once at least 2 people joined, the **▶️ Սկսել հիմա** (start now) button under the poll closes it
    early. Joined players, the starter and group admins can press it.
 2. When Telegram closes the poll:
    - fewer than 2 players: the session is cancelled;
    - exactly one game fits the player count: it's announced right away;
-   - two or more fit: a second poll with those games runs for 2 minutes. Only votes from players who
+   - two or more fit: a second poll with those games runs for 5 minutes. Only votes from players who
      joined are counted; on a tie the bot picks randomly among the tied games and says so;
    - nobody fits because there are too many players: the bot splits everyone into random groups and
      lists the games that fit each group size.
@@ -88,8 +88,8 @@ Add the bot to the group **as an admin** (no special rights are needed). Bots in
 | `WEBHOOK_PATH` | no | `/telegram` | Path the webhook is served on. |
 | `PORT` | no | `8080` | HTTP port in webhook mode (Render sets it). `GET /healthz` returns `ok`. |
 | `DATA_FILE` | no | `data/state.json` | Where the active session is stored. |
-| `JOIN_POLL_SECONDS` | no | `300` | How long the "who's in?" poll stays open (5-600). |
-| `GAME_POLL_SECONDS` | no | `120` | How long the game vote stays open (5-600). |
+| `JOIN_POLL_SECONDS` | no | `600` | How long the "who's in?" poll stays open, in seconds (5-3600). |
+| `GAME_POLL_SECONDS` | no | `300` | How long the game vote stays open, in seconds (5-3600). |
 | `REMINDER_ENABLED` | no | `true` | Turn the daily reminder on or off. |
 | `REMINDER_TIME` | no | `14:00` | Reminder time, 24h `HH:MM`. |
 | `REMINDER_DAYS` | no | `MON-FRI` | Cron day-of-week field: `MON-FRI`, `1-5`, `MON,WED,FRI`, ... |
