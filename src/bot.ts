@@ -25,7 +25,10 @@ export function createBot(
   // Only the Zema Games group and private chats get through. poll / poll_answer updates
   // carry no chat; the flow ignores polls that don't belong to the active session.
   bot.use(async (ctx, next) => {
-    if (!ctx.chat || isGroup(ctx) || isPrivate(ctx)) await next();
+    const kind = Object.keys(ctx.update).find((k) => k !== 'update_id');
+    const allowed = !ctx.chat || isGroup(ctx) || isPrivate(ctx);
+    log.info(`[bot] ${kind}${ctx.chat ? ` from chat ${ctx.chat.id} (${ctx.chat.type})` : ''}${allowed ? '' : ' ignored'}`);
+    if (allowed) await next();
   });
 
   const help = texts.help({
