@@ -34,7 +34,8 @@ The flow is driven by Telegram updates, not by in-memory timers:
 - `allowed_updates` is set to `message`, `callback_query`, `poll`, `poll_answer`.
 - Telegram keeps undelivered updates for up to 24 hours, so a poll that closes while the bot is down is
   processed when it comes back.
-- The active session is saved to a JSON file (`DATA_FILE`) after every change.
+- The active session is saved to a JSON file (`DATA_FILE`) after every change (on a host with a
+  persistent disk; Render's free disk is wiped on restart, see [Hosting](#hosting)).
 - As a safety net, if no close update arrives 15 seconds after the expected close time, the bot stops
   the poll itself and finishes the step.
 
@@ -75,10 +76,10 @@ Add the bot to the group **as an admin** (no special rights are needed). Bots in
 | `TELEGRAM_BOT_TOKEN` | yes | | Bot token from @BotFather. Never commit or log it. |
 | `TELEGRAM_CHAT_ID` | yes | | ID of the Zema Games supergroup (`-100...`). The bot ignores other groups. |
 | `BOT_MODE` | no | `polling` | `polling` (local dev) or `webhook` (production). |
-| `WEBHOOK_URL` | webhook | | Public HTTPS base URL, e.g. `https://bot.example.com`. |
+| `WEBHOOK_URL` | webhook | `RENDER_EXTERNAL_URL` | Public HTTPS base URL, e.g. `https://bot.example.com`. Not needed on Render. |
 | `WEBHOOK_SECRET` | webhook | | Random string (`A-Z a-z 0-9 _ -`). Telegram sends it in a header and the bot rejects requests without it. |
 | `WEBHOOK_PATH` | no | `/telegram` | Path the webhook is served on. |
-| `PORT` | no | `8080` | HTTP port in webhook mode. `GET /healthz` returns `ok`. |
+| `PORT` | no | `8080` | HTTP port in webhook mode (Render sets it). `GET /healthz` returns `ok`. |
 | `DATA_FILE` | no | `data/state.json` | Where the active session is stored. |
 | `JOIN_POLL_SECONDS` | no | `300` | How long the "who's in?" poll stays open (5-600). |
 | `GAME_POLL_SECONDS` | no | `120` | How long the game vote stays open (5-600). |
@@ -86,7 +87,7 @@ Add the bot to the group **as an admin** (no special rights are needed). Bots in
 | `REMINDER_TIME` | no | `14:00` | Reminder time, 24h `HH:MM`. |
 | `REMINDER_DAYS` | no | `MON-FRI` | Cron day-of-week field: `MON-FRI`, `1-5`, `MON,WED,FRI`, ... |
 | `TIMEZONE` | no | `Asia/Yerevan` | Timezone for the reminder. |
-| `DOMAIN` | deploy | | Hostname Caddy serves HTTPS on (Docker Compose deploy only). |
+| `CRON_SECRET` | no | | Enables `GET /cron/reminder` (webhook mode) for an external scheduler. Callers send `Authorization: Bearer <CRON_SECRET>`. At least 16 chars. |
 
 ## Editing the games
 
@@ -114,7 +115,7 @@ session. After editing, run `npm test` and redeploy (see [Updating](#updating)).
 | --- | --- | --- | --- |
 | Blokus | 2-4 | 20 | [Mattel](https://shop.mattel.com/products/blokus-game) (page was rate-limited when checked; 2-4 players and 15-30 min agree across retailer listings) |
 | Azul | 2-4 | 40 (box: 30-45) | [Next Move Games](https://www.nextmove-games.com/en/azul/azul-game/) |
-| Exploding Kittens | 2-5 | 15 | [Exploding Kittens](https://www.explodingkittens.com/products/exploding-kittens), [Asmodee UK](https://www.asmodee.co.uk/products/ekgorg1-exploding-kittens-original-edition) |
+| Exploding Kittens | 2-10 | 15 | Max 10 is our house rule; the official box says 2-5: [Exploding Kittens](https://www.explodingkittens.com/products/exploding-kittens), [Asmodee UK](https://www.asmodee.co.uk/products/ekgorg1-exploding-kittens-original-edition) |
 | Spot it | 2-8 | 15 | [Asmodee](https://store.asmodee.com/products/spot-it-classic-eco-sleeve-ml) |
 | Gartic Phone | 4-30 | 15 | **Unverified.** garticphone.com publishes no player limits. 4 is a practical minimum for a fun chain; 30 is the commonly cited lobby cap. Check a lobby and adjust. |
 
@@ -133,98 +134,83 @@ row) and are in `texts.reminders` in [`src/texts.ts`](src/texts.ts).
 
 ## Hosting
 
-We need an always-on bot with a daily scheduled message and a little persistent state, for free.
+We want it free, and some sleeping on idle is acceptable.
 
-| Option | Sleep / cold start | Scheduled message | State | Verdict |
-| --- | --- | --- | --- | --- |
-| **Oracle Cloud Always Free VM** | Never sleeps | In-process cron works as-is | Real disk | **Chosen** |
-| Cloudflare Workers (free) | Cold starts in ms | Cron Triggers | No disk; needs KV/D1/Durable Objects | Would need a rewrite of storage, scheduling and the fallback timer |
-| Render free web service | Sleeps after 15 min idle, ~1 min wake-up | No free cron; needs an external pinger such as cron-job.org | Disk is wiped on every restart/deploy | Flaky reminder and lost sessions |
-| Fly.io | No sleep | Works | Volumes | No free tier for new accounts (pay as you go) |
+| Option | Sleep / cold start | Scheduled message | Verdict |
+| --- | --- | --- | --- |
+| **Render free web service** | Sleeps after 15 min without traffic, wakes in about 1 min | No free cron jobs; an external scheduler calls the bot | **Chosen** |
+| Oracle Cloud Always Free VM | Never sleeps | In-process cron | Free capacity is often unavailable at sign-up, and idle VMs can be reclaimed |
+| Cloudflare Workers (free) | Cold starts in ms | Cron Triggers | No Node process or disk; storage, scheduling and the fallback timer would need a rewrite |
+| Fly.io / Railway | No sleep | Works | No free tier for new accounts |
 
-**Why Oracle:** the Always Free VM is the only option that is free and behaves like a normal server.
-It never sleeps, so the 14:00 reminder fires on time, and the session file stays on disk across
-restarts. The bot runs unchanged in Docker. The catches are a card check at sign-up and Oracle's
-idle-reclaim policy (see the note in step 1).
+**Why Render:** it deploys this repo as it is (Node runtime, webhook mode) with no server to manage, and
+a free web service wakes up when Telegram sends a webhook, so no update is lost while it sleeps. Two
+free [cron-job.org](https://cron-job.org) jobs handle the rest. One pings `/healthz` during office hours
+so `/play` gets no cold start; the other triggers the 14:00 reminder even if the service is asleep.
 
-### Deploy to Oracle Cloud (Docker Compose, webhook + Caddy HTTPS)
+Render free limits to know:
 
-The production stack is [`deploy/docker-compose.yml`](deploy/docker-compose.yml): the bot in webhook
-mode behind [Caddy](https://caddyserver.com/), which gets a Let's Encrypt certificate automatically.
-Caddy only forwards `/telegram`.
+- 750 free instance hours per workspace per month. Office-hours pinging (about 10 h × 22 days) uses
+  around 220 h.
+- The filesystem is not persistent: the session file is lost on every redeploy, restart or spin-down.
+  With the office-hours pinger the service stays up during sessions. Redeploying while a session is
+  running drops that session; just `/play` again.
+- Build and deploy happen from a Git repository (GitHub, GitLab or Bitbucket).
 
-1. **Create the account and VM**
-   - Sign up at <https://www.oracle.com/cloud/free/> (needs a card for verification; Always Free
-     resources are not charged). Pick a home region close to Armenia, e.g. Frankfurt.
-   - Compute → Instances → Create instance: image **Ubuntu 24.04**, shape **VM.Standard.A1.Flex**
-     (1 OCPU / 6 GB is plenty) or **VM.Standard.E2.1.Micro**. Add your SSH public key.
-     If A1 shows "out of capacity", try another availability domain or the E2 Micro shape.
-   - Oracle can reclaim Always Free VMs that stay almost idle for 7 days, and this bot is almost
-     idle. Upgrading the account to **Pay As You Go** stops reclamation and Always Free resources stay
-     free. Optionally set a budget alert.
-2. **Open ports 80 and 443**
-   - In the VM's subnet → Security List, add ingress rules for TCP 80 and 443 from `0.0.0.0/0`.
-   - Oracle's Ubuntu images also block ports in iptables. On the VM:
-     ```bash
-     sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
-     sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
-     sudo netfilter-persistent save
-     ```
-3. **Install Docker** on the VM:
+### Deploy to Render
+
+1. **Push the repo to GitHub** (a private repo is fine):
    ```bash
-   curl -fsSL https://get.docker.com | sudo sh
-   sudo usermod -aG docker $USER && newgrp docker
+   git remote add origin git@github.com:<org>/zema-games-bot.git
+   git push -u origin main
    ```
-4. **Copy the code** from your machine (the repo has no remote):
-   ```bash
-   rsync -av --exclude node_modules --exclude dist --exclude data --exclude .env ./ ubuntu@<VM_IP>:~/zema-games/
-   ```
-5. **Create `.env` on the VM** (`~/zema-games/.env`):
-   ```bash
-   TELEGRAM_BOT_TOKEN=<token>
-   TELEGRAM_CHAT_ID=-1003795070488
-   WEBHOOK_SECRET=<output of: openssl rand -hex 32>
-   DOMAIN=<VM_IP with dots replaced by dashes>.sslip.io
-   ```
-   [sslip.io](https://sslip.io) resolves `129-151-10-20.sslip.io` to `129.151.10.20`, so no domain
-   purchase is needed. If you have a domain, point an A record at the VM and use it instead.
-   `chmod 600 .env`.
-6. **Start it**:
-   ```bash
-   cd ~/zema-games
-   docker compose --env-file .env -f deploy/docker-compose.yml up -d --build
-   docker compose --env-file .env -f deploy/docker-compose.yml logs -f bot
-   ```
-   You should see `starting in webhook mode` and `webhook set`. Check
-   `https://<DOMAIN>/telegram` from a browser: it should return a 404 page with a valid certificate (the bot only accepts POST there).
-7. **Check it in Telegram**: send `/help` to the bot in a private chat, then `/play` in the group.
+2. **Create the service from the Blueprint**: in the Render dashboard choose **New → Blueprint**,
+   connect GitHub and pick the repo. Render reads [`render.yaml`](render.yaml): a free Node web
+   service in Frankfurt with `npm ci && npm run build` and `npm start`, health check on `/healthz`.
+3. **Fill in the secrets** Render asks for:
+   - `TELEGRAM_BOT_TOKEN`: the production bot token.
+   - `TELEGRAM_CHAT_ID`: `-1003795070488`.
+   - `WEBHOOK_SECRET` and `CRON_SECRET`: generate each with `openssl rand -hex 32`.
 
-The webhook is registered with `max_connections: 1` and the secret token, so updates are processed one
-at a time and requests without the secret are rejected.
+   `WEBHOOK_URL` and `PORT` are not needed: the bot uses Render's `RENDER_EXTERNAL_URL` and `PORT`.
+4. **Deploy and check the logs**. You should see `starting in webhook mode` and
+   `webhook set, listening on :10000/telegram, /cron/reminder enabled`. Then open
+   `https://<service>.onrender.com/healthz`; it should return `ok`.
+5. **Create two cron-job.org jobs** (free account), both with timezone **Asia/Yerevan**:
+   - **Keep warm**: `GET https://<service>.onrender.com/healthz`, every 10 minutes, Monday to Friday,
+     09:00-19:00.
+   - **Daily reminder**: `GET https://<service>.onrender.com/cron/reminder` with header
+     `Authorization: Bearer <CRON_SECRET>`, Monday to Friday at 14:00 and again at 14:10. The second
+     call is a retry in case the first one timed out during a cold start.
+
+   The endpoint only sends when the current time is within 30 minutes after the configured
+   `REMINDER_TIME`/`REMINDER_DAYS`, and at most once per day. If you change the reminder time in
+   Render, move the cron-job.org schedule too. The in-process cron also fires when the service is
+   awake at 14:00; duplicates are prevented by the same once-per-day check.
+6. **Check it in Telegram**: `/help` in a private chat, then `/play` in the group.
 
 ### Updating
 
-```bash
-rsync -av --exclude node_modules --exclude dist --exclude data --exclude .env ./ ubuntu@<VM_IP>:~/zema-games/
-ssh ubuntu@<VM_IP> 'cd ~/zema-games && docker compose --env-file .env -f deploy/docker-compose.yml up -d --build'
-```
+Push to `main`; Render redeploys automatically. Changing `games.json` works the same way.
 
-The session file is in the `bot-data` Docker volume, so it survives rebuilds.
+### Running it elsewhere
 
-### Running with long polling instead
-
-If you'd rather not open ports, polling works on the VM too:
+The [`Dockerfile`](Dockerfile) runs the same bot on any Docker host:
 
 ```bash
 docker build -t zema-games-bot .
-docker run -d --name zema-games-bot --restart unless-stopped --env-file .env -e BOT_MODE=polling -v zema-games-data:/app/data zema-games-bot
+docker run -d --restart unless-stopped --env-file .env -v zema-games-data:/app/data zema-games-bot
 ```
+
+That's long polling by default. On a host that is always on, the in-process reminder is enough and
+no cron-job.org jobs are needed.
 
 ## Project layout
 
 ```
 src/
-  index.ts     entry point: config, polling or webhook server, reminder job
+  index.ts     entry point: config, polling or webhook mode, reminder job
+  server.ts    webhook HTTP server: /telegram, /healthz, /cron/reminder
   bot.ts       grammY handlers, chat filter, command menus
   flow.ts      session state machine (join poll -> game poll -> final message)
   plan.ts      pure logic: game filtering, plan after join, tie-break, group split
@@ -235,5 +221,5 @@ src/
   texts.ts     every Armenian text
   log.ts       logging with bot-token redaction
 games.json     the game list
-deploy/        docker-compose.yml and Caddyfile for Oracle Cloud
+render.yaml    Render Blueprint (free web service)
 ```

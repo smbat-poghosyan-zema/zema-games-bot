@@ -10,13 +10,15 @@
 - [x] Bot handlers: /play, /cancel, /games, /help, reminder button, poll + poll_answer
 - [x] Fallback finalizer if a poll-closed update never arrives
 - [x] Long polling (dev) and webhook (prod) modes
-- [x] Dockerfile + deploy config for chosen host (Oracle Cloud Always Free, Compose + Caddy)
+- [x] Dockerfile + deploy config for chosen host (switched from Oracle to Render free + cron-job.org)
+- [x] /cron/reminder endpoint for external scheduler (Render sleeps)
+- [x] Exploding Kittens max players set to 10 (team house rule)
 - [x] README (setup, env, games.json, reminder, deploy)
 - [x] npm run build / lint / test pass
 - [x] Local run: bot starts in polling mode (npm run dev and Docker); /help and /games covered by handler tests
 - [x] Found: grammY network errors printed the token in the URL; added redacting logger
-- [ ] Manual: /help and /games from a real private chat (needs a human to send them)
-- [ ] Manual: first real /play in the group (needs approval before posting there)
+- [x] Manual: /help, /games and /play tested by Smbat in the group (local polling)
+- [ ] Manual: /help from a private chat
 - [ ] Verify Gartic Phone min/max players in a real lobby and update games.json
 - [ ] Make the bot a group admin (privacy mode) before production
-- [ ] Deploy to Oracle Cloud (needs account)
+- [ ] Push to GitHub, deploy Render Blueprint, set up cron-job.org (needs accounts)

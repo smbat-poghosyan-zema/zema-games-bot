@@ -1,0 +1,28 @@
+# Render Blueprint: free web service running the bot in webhook mode.
+# Render → New → Blueprint → pick this repo. Secrets marked sync: false are asked for on first deploy.
+services:
+  - type: web
+    name: zema-games-bot
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: BOT_MODE
+        value: webhook
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      # openssl rand -hex 32 (letters, digits, _ and - only)
+      - key: WEBHOOK_SECRET
+        sync: false
+      # openssl rand -hex 32; cron-job.org sends it as "Authorization: Bearer <value>"
+      - key: CRON_SECRET
+        sync: false
+      # WEBHOOK_URL is not needed: Render provides RENDER_EXTERNAL_URL and PORT.
