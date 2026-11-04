@@ -1,0 +1,48 @@
+[
+  {
+    "name": "Blokus",
+    "type": "physical",
+    "minPlayers": 2,
+    "maxPlayers": 4,
+    "durationMinutes": 20,
+    "description": "Տեղավորիր քո գունավոր կտորները տախտակին և փակիր մյուսների ճանապարհը։",
+    "source": "Mattel product page https://shop.mattel.com/products/blokus-game (rate-limited when checked). Retailer listings agree on 2-4 players, ages 7+, 15-30 min."
+  },
+  {
+    "name": "Azul",
+    "type": "physical",
+    "minPlayers": 2,
+    "maxPlayers": 4,
+    "durationMinutes": 40,
+    "description": "Հավաքիր գեղեցիկ սալիկներ և զարդարիր պալատի պատը՝ հավաքելով ամենաշատ միավորները։",
+    "source": "Next Move Games: 2-4 players, 30-45 min, ages 8+ (https://www.nextmove-games.com/en/azul/azul-game/)."
+  },
+  {
+    "name": "Exploding Kittens",
+    "type": "physical",
+    "minPlayers": 2,
+    "maxPlayers": 5,
+    "durationMinutes": 15,
+    "description": "Քաշիր քարտեր, խաբիր ընկերներիդ և մի՛ քաշիր պայթող կատվին։",
+    "source": "Exploding Kittens (Original Edition): 2-5 players, 15 min, ages 7+ (https://www.explodingkittens.com/products/exploding-kittens, confirmed by https://www.asmodee.co.uk/products/ekgorg1-exploding-kittens-original-edition)."
+  },
+  {
+    "name": "Spot it",
+    "type": "physical",
+    "minPlayers": 2,
+    "maxPlayers": 8,
+    "durationMinutes": 15,
+    "description": "Ամենաարագը գտիր երկու քարտերի միակ ընդհանուր նկարը։",
+    "source": "Asmodee (Spot it! Classic): 2-8 players, 15 min or less, ages 6+ (https://store.asmodee.com/products/spot-it-classic-eco-sleeve-ml)."
+  },
+  {
+    "name": "Gartic Phone",
+    "type": "online",
+    "minPlayers": 4,
+    "maxPlayers": 30,
+    "durationMinutes": 15,
+    "description": "Գրիր, նկարիր, գուշակիր. «կոտրված հեռախոս» նկարներով, ծիծաղը երաշխավորված է։",
+    "link": "https://garticphone.com/",
+    "source": "UNVERIFIED: garticphone.com has no public player-count spec. 4 is the practical minimum for a fun chain, 30 is the commonly cited lobby limit; round length depends on lobby settings. Check a lobby and adjust."
+  }
+]
