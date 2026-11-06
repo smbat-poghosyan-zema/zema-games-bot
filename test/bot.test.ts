@@ -17,6 +17,7 @@ describe('bot handlers', () => {
   let dir: string;
   let calls: { method: string; payload: Record<string, unknown> }[];
   let bot: ReturnType<typeof createBot>['bot'];
+  let flow: ReturnType<typeof createBot>['flow'];
   let updateId = 1;
 
   beforeEach(() => {
@@ -24,7 +25,7 @@ describe('bot handlers', () => {
     calls = [];
     const config = loadConfig({ TELEGRAM_BOT_TOKEN: 'test:token', TELEGRAM_CHAT_ID: String(GROUP) });
     const games = loadGames();
-    ({ bot } = createBot(
+    ({ bot, flow } = createBot(
       config,
       games,
       (api) =>
@@ -59,6 +60,20 @@ describe('bot handlers', () => {
     }) as unknown as Update;
 
   const dm = { id: 5, type: 'private' };
+  const group = { id: GROUP, type: 'supergroup' };
+  const sessionId = () => flow.sessions[0]!.id;
+
+  const callback = (data: string, fromId = 5): Update =>
+    ({
+      update_id: updateId++,
+      callback_query: {
+        id: `cb${updateId}`,
+        chat_instance: 'x',
+        data,
+        from: { id: fromId, is_bot: false, first_name: fromId === 5 ? 'Ann' : 'Other' },
+        message: { message_id: 9, date: 0, chat: { ...group, title: 'x' } },
+      },
+    }) as unknown as Update;
 
   it('answers /help and /start in a private chat', async () => {
     await bot.handleUpdate(message(dm, '/help'));
@@ -74,6 +89,7 @@ describe('bot handlers', () => {
     expect(text).toContain('<b>Blokus</b> (սեղանի) · 2-4 հոգի · ~20 րոպե');
     expect(text).toContain('<b>Gartic Phone</b> (օնլայն)');
     expect(text).toContain('https://garticphone.com/');
+    expect(text).toContain('<b>Kitten Kaboom</b> (օնլայն) · 2-10 հոգի · ~20-30 րոպե');
   });
 
   it('points /play in a private chat to the group', async () => {
@@ -81,25 +97,62 @@ describe('bot handlers', () => {
     expect(calls[0]!.payload.text).toBe(texts.playOnlyInGroup);
   });
 
-  it('starts a non-anonymous 10-minute poll on /play@ZemaGamesBot in the group', async () => {
-    await bot.handleUpdate(message({ id: GROUP, type: 'supergroup' }, '/play@ZemaGamesBot'));
-    expect(calls[0]).toMatchObject({
-      method: 'sendPoll',
-      payload: { chat_id: GROUP, is_anonymous: false, open_period: 600 },
+  it('opens the game picker on /play@ZemaGamesBot, then a 10-minute poll after Done', async () => {
+    await bot.handleUpdate(message(group, '/play@ZemaGamesBot'));
+    expect(calls[0]).toMatchObject({ method: 'sendMessage', payload: { chat_id: GROUP, parse_mode: 'HTML' } });
+    const id = sessionId();
+
+    await bot.handleUpdate(callback(`pick:${id}:1`));
+    await bot.handleUpdate(callback(`pick:${id}:4`));
+    await bot.handleUpdate(callback(`pickdone:${id}`));
+    expect(calls.map((c) => c.method)).toEqual([
+      'sendMessage',
+      'editMessageReplyMarkup',
+      'answerCallbackQuery',
+      'editMessageReplyMarkup',
+      'answerCallbackQuery',
+      'sendPoll',
+      'deleteMessage',
+      'answerCallbackQuery',
+    ]);
+    expect(calls[5]!.payload).toMatchObject({ chat_id: GROUP, is_anonymous: false, open_period: 600 });
+    expect(String(calls[5]!.payload.question)).toContain('Ann 🎲 Azul, Gartic Phone');
+  });
+
+  it('refuses picker taps from someone else', async () => {
+    await bot.handleUpdate(message(group, '/play'));
+    await bot.handleUpdate(callback(`pick:${sessionId()}:1`, 6));
+    expect(calls.at(-1)).toMatchObject({
+      method: 'answerCallbackQuery',
+      payload: { text: texts.pickerForbidden, show_alert: true },
     });
   });
 
+  it('deletes a session with its Delete button', async () => {
+    await bot.handleUpdate(message(group, '/play'));
+    await bot.handleUpdate(callback(`del:${sessionId()}`));
+    expect(calls.slice(1).map((c) => c.method)).toEqual(['deleteMessage', 'answerCallbackQuery']);
+    expect(calls.at(-1)!.payload).toMatchObject({ text: texts.deleted });
+    expect(flow.sessions).toEqual([]);
+  });
+
+  it('answers buttons of finished or pre-upgrade polls as closed', async () => {
+    await bot.handleUpdate(callback('start_now'));
+    await bot.handleUpdate(callback('start:gone'));
+    expect(calls.map((c) => c.payload.text)).toEqual([texts.startNowClosed, texts.startNowClosed]);
+  });
+
   it('starts with a chosen game on /play <name>', async () => {
-    await bot.handleUpdate(message({ id: GROUP, type: 'supergroup' }, '/play@ZemaGamesBot exploding kittens'));
+    await bot.handleUpdate(message(group, '/play@ZemaGamesBot exploding kittens'));
     expect(calls[0]).toMatchObject({ method: 'sendPoll' });
     expect(String(calls[0]!.payload.question)).toContain('Exploding Kittens (2-10 հոգի)');
   });
 
   it('lists the games when /play <name> matches nothing', async () => {
-    await bot.handleUpdate(message({ id: GROUP, type: 'supergroup' }, '/play chess'));
+    await bot.handleUpdate(message(group, '/play chess'));
     expect(calls[0]!.method).toBe('sendMessage');
     expect(String(calls[0]!.payload.text)).toBe(
-      texts.gameNotFound('Blokus, Azul, Exploding Kittens, Spot it, Gartic Phone'),
+      texts.gameNotFound('Blokus, Azul, Exploding Kittens, Spot it, Gartic Phone, Bloomgrid, Kitten Kaboom'),
     );
   });
 

@@ -44,5 +44,27 @@
     "description": "Գրիր, նկարիր, գուշակիր. «կոտրված հեռախոս» նկարներով, ծիծաղը երաշխավորված է։",
     "link": "https://garticphone.com/",
     "source": "UNVERIFIED: garticphone.com has no public player-count spec. 4 is the practical minimum for a fun chain, 30 is the commonly cited lobby limit; round length depends on lobby settings. Check a lobby and adjust."
+  },
+  {
+    "name": "Bloomgrid",
+    "type": "online",
+    "minPlayers": 2,
+    "maxPlayers": 4,
+    "durationMinutes": 20,
+    "maxDurationMinutes": 30,
+    "description": "Blokus-ի օնլայն տարբերակը. տեղավորիր քո կտորները դաշտում և փակիր մյուսների ճանապարհը։",
+    "link": "https://bloomgrid-d2r6.onrender.com/",
+    "source": "Site meta description: tile-laying strategy game for 2-4 players (https://bloomgrid-d2r6.onrender.com/). Duration 20-30 min set by the team."
+  },
+  {
+    "name": "Kitten Kaboom",
+    "type": "online",
+    "minPlayers": 2,
+    "maxPlayers": 10,
+    "durationMinutes": 20,
+    "maxDurationMinutes": 30,
+    "description": "Exploding Kittens-ի օնլայն տարբերակը. քաշիր քարտեր և մի՛ քաշիր պայթող կատվին։",
+    "link": "https://kitten-kaboom.onrender.com/",
+    "source": "Site meta description: real-time multiplayer card game for 2-10 players (https://kitten-kaboom.onrender.com/). Duration 20-30 min set by the team."
   }
 ]

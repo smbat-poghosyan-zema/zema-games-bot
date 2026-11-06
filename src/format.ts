@@ -45,13 +45,19 @@ export function playersRange(g: Game): string {
   return g.minPlayers === g.maxPlayers ? `${g.minPlayers}` : `${g.minPlayers}-${g.maxPlayers}`;
 }
 
+export function durationRange(g: Game): string {
+  return g.maxDurationMinutes && g.maxDurationMinutes !== g.durationMinutes
+    ? `${g.durationMinutes}-${g.maxDurationMinutes}`
+    : `${g.durationMinutes}`;
+}
+
 export function gamesListMessage(games: readonly Game[]): string {
   const lines = games.map((g) =>
     texts.gameLine({
       name: escapeHtml(g.name),
       kind: texts.gameKind[g.type],
       players: playersRange(g),
-      minutes: g.durationMinutes,
+      minutes: durationRange(g),
       description: escapeHtml(g.description),
       ...(g.link ? { link: escapeHtml(g.link) } : {}),
     }),

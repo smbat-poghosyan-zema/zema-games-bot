@@ -10,16 +10,19 @@ export const texts = {
       'Բարև 👋 Ես Zema Games բոտն եմ, օգնում եմ գրասենյակում խաղ կազմակերպել 🎲',
       '',
       '<b>Հրամաններ</b>',
-      '/play · սկսել նոր խաղ',
+      '/play · սկսել նոր խաղ (նախ նշում ես, թե որ խաղերը կուզեիր)',
       '/play Azul · սկսել կոնկրետ խաղով (առանց քվեարկության)',
       '/games · մեր խաղերի ցանկը',
-      '/cancel · չեղարկել ընթացիկ խաղը (սկսողը կամ ադմինը)',
+      '/cancel · ջնջել քո բաց հարցումը',
       '/help · այս հաղորդագրությունը',
       '',
       '<b>Ինչպես է աշխատում</b>',
-      `1. /play-ից հետո ${o.joinMinutes} րոպե ունեք միանալու համար։ Եթե արդեն 2+ հոգի եք, սեղմեք «▶️ Սկսել հիմա»։`,
-      '2. Ընտրում ենք խաղը՝ ըստ մարդկանց քանակի (եթե տարբերակները շատ են, քվեարկում ենք)։',
-      '3. Ես կանչում եմ թիմին, և գնում եք խաղալու 🚀',
+      '1. /play-ից հետո նշում ես այն խաղերը, որոնք կուզեիր խաղալ, և սեղմում «✔️ Պատրաստ է»։',
+      `2. Բոլորը ${o.joinMinutes} րոպե ունեն միանալու համար։ Հարցումը բացողը կարող է սեղմել «▶️ Սկսել հիմա»։`,
+      '3. Նշված խաղերից մնում են նրանք, որոնք հարմար են մարդկանց քանակին (եթե մի քանիսն են, քվեարկում ենք)։',
+      '4. Ես կանչում եմ թիմին, և գնում եք խաղալու 🚀',
+      '',
+      'Ամեն մեկը կարող է բացել իր հարցումը, բայց միաժամանակ միայն մեկը։ «🗑 Ջնջել» կոճակով ջնջում ես քոնը։',
       '',
       `Աշխատանքային օրերին ${o.reminderTime}-ին կհիշեցնեմ, որ դադարի ժամն է ☕`,
     ].join('\n'),
@@ -27,10 +30,18 @@ export const texts = {
   playOnlyInGroup: 'Խաղերը սկսվում են Zema Games խմբում 🙂 Գրիր /play այնտեղ։',
   cancelOnlyInGroup: 'Խաղը կարելի է չեղարկել միայն Zema Games խմբում։',
 
+  // Game picker (HTML message with buttons)
+  pickerPrompt: (who: string, minutes: number) =>
+    `${who}, ո՞ր խաղերը կուզեիր խաղալ 🎲 Նշիր մեկ կամ մի քանի խաղ և սեղմիր «✔️ Պատրաստ է» (${minutes} րոպե)`,
+  pickerDoneButton: '✔️ Պատրաստ է',
+  pickerForbidden: 'Խաղերն ընտրում է հարցումը բացողը 🙂 Քո հարցումը բացիր /play-ով',
+  pickerEmpty: 'Նշիր գոնե մեկ խաղ 🙂',
+
   // Join poll (plain text)
-  joinPollQuestion: (minutes: number) => `Ո՞վ է խաղում 🎲 Միացեք ${minutes} րոպեի ընթացքում`,
-  joinPollQuestionForGame: (game: string, players: string, minutes: number) =>
-    `Խաղում ենք ${game} (${players} հոգի) 🎲 Ո՞վ է միանում։ Միացեք ${minutes} րոպեի ընթացքում`,
+  joinPollQuestion: (starter: string, games: string, minutes: number) =>
+    `Խաղ է հավաքում՝ ${starter} 🎲 ${games}։ Ո՞վ է միանում (${minutes} րոպե)`,
+  joinPollQuestionForGame: (starter: string, game: string, players: string, minutes: number) =>
+    `Խաղ է հավաքում՝ ${starter} 🎲 ${game} (${players} հոգի)։ Ո՞վ է միանում (${minutes} րոպե)`,
   joinOptionYes: 'Ես խաղում եմ 🙋',
   joinOptionNo: 'Այս անգամ՝ ոչ',
 
@@ -44,12 +55,19 @@ export const texts = {
     `${game}-ի համար պետք է առնվազն ${min} հոգի, իսկ միացել է ${joined}-ը 😅 Խաղը չեղարկվեց, փորձեք մեկ այլ խաղ կամ /play`,
   splitIntroForGame: (game: string, players: number, max: number) =>
     `Վա՜յ, ${players} հոգի ենք 🎉 ${game}-ը մինչև ${max} հոգու համար է, բաժանվենք խմբերի՝`,
-  startNowForbidden: 'Սկսել կարող են միայն միացածները 🙂',
+  startNowForbidden: 'Սկսել կարող է միայն հարցումը բացողը 🙂',
   startNowClosed: 'Այս հարցումն արդեն փակված է',
 
-  sessionAlreadyActive: 'Արդեն խաղ է հավաքվում 👆 Միացիր այս հարցմանը։',
-  callbackSessionActive: 'Խաղն արդեն հավաքվում է 👆',
-  callbackStarted: 'Սկսում ենք 🎲',
+  deleteButton: '🗑 Ջնջել',
+  deleted: 'Հարցումը ջնջվեց 🗑',
+  deleteForbidden: 'Ջնջել կարող է միայն հարցումը բացողը կամ ադմինը 🙂',
+
+  ownSessionExists: (who: string) => `${who}, դու արդեն բաց հարցում ունես 👆 Ջնջե՞լ այն և բացել նորը։`,
+  replaceButton: '🗑 Ջնջել և բացել նորը',
+  keepButton: 'Թողնել',
+  notYours: 'Սա քո հարցումը չէ 🙂',
+  callbackOwnActive: 'Դու արդեն բաց հարցում ունես 👆',
+  callbackStarted: 'Ընտրիր խաղերը 🎲',
 
   tooFew: (min: number) => `Այս անգամ չհավաքվեցինք 😅 Պետք է առնվազն ${min} հոգի։ Հաջորդ անգամ անպայման 💪`,
 
@@ -78,15 +96,16 @@ export const texts = {
     `<b>Խումբ ${o.index}</b> (${o.size} հոգի)՝ ${o.mentions}\nԽաղեր՝ ${o.games}`,
   splitOutro: 'Թիմերը պատրաստ են, գնացինք խաղալու 🚀',
 
+  noPickedFit: (players: number, games: string, mentions: string) =>
+    `${players} հոգու համար նշված խաղերից ոչ մեկը չի համապատասխանում 🤔 Բայց կարող եք խաղալ՝ ${games}։ ${mentions}`,
   noFit: (players: number, mentions: string) =>
     `${players} հոգու համար հարմար խաղ չգտա 🤔 Նայեք /games ցանկը և ընտրեք ինքներդ՝ ${mentions}`,
 
-  cancelled: (by: string) => `Խաղը չեղարկվեց ❌ Չեղարկեց՝ ${by}`,
-  noActiveSession: 'Հիմա ակտիվ խաղ չկա։ Սկսիր /play-ով 🎲',
-  cancelNotAllowed: 'Չեղարկել կարող է միայն խաղը սկսողը կամ ադմինը 🙂',
+  cancelled: (by: string) => `Հարցումը ջնջվեց 🗑 Ջնջեց՝ ${by}`,
+  noOwnSession: 'Դու բաց հարցում չունես։ Սկսիր /play-ով 🎲',
 
   gamesHeader: '🎲 <b>Մեր խաղերը</b>',
-  gameLine: (o: { name: string; kind: string; players: string; minutes: number; description: string; link?: string }) =>
+  gameLine: (o: { name: string; kind: string; players: string; minutes: string; description: string; link?: string }) =>
     [
       `• <b>${o.name}</b> (${o.kind}) · ${o.players} հոգի · ~${o.minutes} րոպե`,
       `  ${o.description}`,
@@ -107,7 +126,7 @@ export const texts = {
   commands: {
     play: 'Սկսել նոր խաղ',
     games: 'Խաղերի ցանկը',
-    cancel: 'Չեղարկել ընթացիկ խաղը',
+    cancel: 'Ջնջել քո բաց հարցումը',
     help: 'Ինչպես օգտվել բոտից',
   },
 } as const;

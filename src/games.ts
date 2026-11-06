@@ -8,8 +8,10 @@ export interface Game {
   type: GameType;
   minPlayers: number;
   maxPlayers: number;
-  /** Average play time in minutes. */
+  /** Average play time in minutes (the lower end when `maxDurationMinutes` is set). */
   durationMinutes: number;
+  /** Upper end of the play time, for games listed as a range like 20-30 minutes. */
+  maxDurationMinutes?: number;
   /** One-line description in Armenian. */
   description: string;
   /** Link to play (online games only). */
@@ -36,6 +38,12 @@ export function parseGames(raw: unknown): Game[] {
       const v = g[key];
       if (typeof v !== 'number' || !Number.isInteger(v) || v < 1) {
         throw new Error(`${where} (${g.name}): ${key} must be a positive integer`);
+      }
+    }
+    if (g.maxDurationMinutes !== undefined) {
+      const v = g.maxDurationMinutes;
+      if (typeof v !== 'number' || !Number.isInteger(v) || v < g.durationMinutes!) {
+        throw new Error(`${where} (${g.name}): maxDurationMinutes must be an integer >= durationMinutes`);
       }
     }
     if (g.minPlayers! > g.maxPlayers!) {
