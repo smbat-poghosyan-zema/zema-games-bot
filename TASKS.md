@@ -27,8 +27,10 @@
 - [x] Thu 2026-11-05 14:00 reminder sent (service was awake, in-process cron)
 - [x] Found: Fri 2026-11-06 reminder missed, Render answered cron-job.org with 429 while asleep
 - [x] Cloudflare cron Worker (worker/) replaces cron-job.org: keep warm + /cron/reminder every 10 min
-- [ ] Deploy the Worker (needs CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID), then disable cron-job.org jobs
-- [ ] Confirm the first Worker-triggered reminder
+- [x] Worker zema-games-cron deployed 2026-11-06; first run reached the bot (12:00 UTC, "not due")
+- [x] cron-job.org jobs disabled (kept for rollback)
+- [x] Render GitHub App installed on smbat-poghosyan-zema (auto-deploy on push to main)
+- [ ] Confirm the first Worker-triggered reminder (Mon 2026-11-09 14:00)
 - [x] Game picker before the join poll, final choice among ticked games
 - [x] Parallel sessions: one per starter, starter-only start now, delete by starter or admin
 - [x] Added Bloomgrid and Kitten Kaboom (online)
