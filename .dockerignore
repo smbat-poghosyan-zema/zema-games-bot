@@ -7,3 +7,4 @@ coverage
 .git
 test
 *.md
+worker
