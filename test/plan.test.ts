@@ -169,11 +169,22 @@ describe('parseGames', () => {
     expect(() => parseGames([{ ...game('X', 4, 2) }])).toThrow(/minPlayers is greater/);
     expect(() => parseGames([{ ...game('X', 2, 4), type: 'online' }])).toThrow(/need a link/);
     expect(() => parseGames([])).toThrow(/non-empty/);
+    expect(() => parseGames([{ ...game('X', 2, 4), durationMinutes: 20, maxDurationMinutes: 10 }])).toThrow(
+      /maxDurationMinutes/,
+    );
   });
 
-  it('games.json has all five games with player counts and sources', () => {
+  it('games.json has all seven games with player counts and sources', () => {
     const real = loadGames();
-    expect(names(real)).toEqual(['Blokus', 'Azul', 'Exploding Kittens', 'Spot it', 'Gartic Phone']);
+    expect(names(real)).toEqual([
+      'Blokus',
+      'Azul',
+      'Exploding Kittens',
+      'Spot it',
+      'Gartic Phone',
+      'Bloomgrid',
+      'Kitten Kaboom',
+    ]);
     for (const g of real) expect(g.source.length).toBeGreaterThan(10);
   });
 });

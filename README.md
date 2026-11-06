@@ -1,34 +1,45 @@
 # Zema Games bot
 
 Telegram bot ([@zemagames_bot](https://t.me/zemagames_bot)) that organizes office game sessions in the
-**Zema Games** supergroup. Someone types `/play`, the bot runs a "who's in?" poll, picks a game that
-fits the number of players (with a second poll when several fit) and tags the team. On weekdays after
+**Zema Games** supergroup. Someone types `/play` and ticks the games they'd like to play, the bot runs a
+"who's in?" poll, picks the ticked game that fits the number of players (with a second poll when several
+fit) and tags the team. Several people can collect players at the same time. On weekdays after
 lunch it posts a reminder with a button that starts `/play`.
 
 All bot texts are Armenian and live in [`src/texts.ts`](src/texts.ts).
 
 ## How a session works
 
-1. `/play` in the group (or the **🎲 Սկսել խաղը** button under the daily reminder) posts a native,
-   non-anonymous poll that closes after 10 minutes. Only one session can run at a time.
-   Once at least 2 people joined, the **▶️ Սկսել հիմա** (start now) button under the poll closes it
-   early. Joined players, the starter and group admins can press it.
-2. When Telegram closes the poll:
-   - fewer than 2 players: the session is cancelled;
-   - exactly one game fits the player count: it's announced right away;
+1. `/play` in the group (or the **🎲 Սկսել խաղը** button under the daily reminder) posts a game picker:
+   one checkbox button per game, plus **✔️ Պատրաստ է** (done) and **🗑 Ջնջել** (delete). Only the
+   starter can tick games. An unfinished picker is dropped after 5 minutes.
+2. After Done, the bot posts a native, non-anonymous poll that names the starter and the ticked games
+   and closes after 10 minutes. Ticking a single game works like `/play <game>` (below).
+   Under the poll, **▶️ Սկսել հիմա** (start now) closes it early once at least 2 people joined; only
+   the starter can press it. **🗑 Ջնջել** deletes the poll; the starter or a group admin can press it.
+3. When Telegram closes the poll, only the ticked games count:
+   - fewer than 2 players: the session ends;
+   - exactly one ticked game fits the player count: it's announced right away;
    - two or more fit: a second poll with those games runs for 5 minutes. Only votes from players who
      joined are counted; on a tie the bot picks randomly among the tied games and says so;
-   - nobody fits because there are too many players: the bot splits everyone into random groups and
-     lists the games that fit each group size.
-3. The final message names the game (plus the link for online games) and mentions every player
+   - too many players for every ticked game: the bot splits everyone into random groups and lists the
+     ticked games that fit each group size;
+   - none fits otherwise (e.g. too few for all of them): the bot lists other games from the catalog
+     that fit, if any.
+4. The final message names the game (plus the link for online games) and mentions every player
    (`@username`, or a text mention when the user has no username).
 
-Commands: `/play`, `/play <game>`, `/games`, `/cancel` (session starter or a group admin), `/help`.
+**Parallel sessions.** Anyone can open a session while others are running, but each person can have
+only one open at a time. Running `/play` again asks whether to delete the open one and start a new one
+(**🗑 Ջնջել և բացել նորը** / **Թողնել**); nothing is deleted without that confirmation. A player may
+join several polls. The daily reminder is skipped while any session is open.
 
-`/play <game>` (e.g. `/play Azul`, `/play kittens`; case-insensitive, partial names work) starts a
-session for that game and skips the vote. When the poll closes: fewer than the game's minimum cancels,
-within its range announces the team, more than its maximum splits everyone into groups for that game.
-The start now button then needs the game's minimum instead of 2.
+Commands: `/play`, `/play <game>`, `/games`, `/cancel` (deletes your own open session), `/help`.
+
+`/play <game>` (e.g. `/play Azul`, `/play kittens`; case-insensitive, partial names work) skips the
+picker and the vote. When the poll closes: fewer than the game's minimum ends the session, within its
+range announces the team, more than its maximum splits everyone into groups for that game. The start
+now button then needs the game's minimum instead of 2.
 In private chats only `/help`, `/start` and `/games` work. Other groups are ignored.
 
 ### Why it survives restarts
@@ -41,7 +52,7 @@ The flow is driven by Telegram updates, not by in-memory timers:
 - `allowed_updates` is set to `message`, `callback_query`, `poll`, `poll_answer`.
 - Telegram keeps undelivered updates for up to 24 hours, so a poll that closes while the bot is down is
   processed when it comes back.
-- The active session is saved to a JSON file (`DATA_FILE`) after every change (on a host with a
+- Open sessions are saved to a JSON file (`DATA_FILE`) after every change (on a host with a
   persistent disk; Render's free disk is wiped on restart, see [Hosting](#hosting)).
 - As a safety net, if no close update arrives 15 seconds after the expected close time, the bot stops
   the poll itself and finishes the step.
@@ -87,7 +98,7 @@ Add the bot to the group **as an admin** (no special rights are needed). Bots in
 | `WEBHOOK_SECRET` | webhook | | Random string (`A-Z a-z 0-9 _ -`). Telegram sends it in a header and the bot rejects requests without it. |
 | `WEBHOOK_PATH` | no | `/telegram` | Path the webhook is served on. |
 | `PORT` | no | `8080` | HTTP port in webhook mode (Render sets it). `GET /healthz` returns `ok`. |
-| `DATA_FILE` | no | `data/state.json` | Where the active session is stored. |
+| `DATA_FILE` | no | `data/state.json` | Where open sessions are stored. |
 | `JOIN_POLL_SECONDS` | no | `600` | How long the "who's in?" poll stays open, in seconds (5-3600). |
 | `GAME_POLL_SECONDS` | no | `300` | How long the game vote stays open, in seconds (5-3600). |
 | `REMINDER_ENABLED` | no | `true` | Turn the daily reminder on or off. |
@@ -151,9 +162,14 @@ We want it free, and some sleeping on idle is acceptable.
 | Fly.io / Railway | No sleep | Works | No free tier for new accounts |
 
 **Why Render:** it deploys this repo as it is (Node runtime, webhook mode) with no server to manage, and
-a free web service wakes up when Telegram sends a webhook, so no update is lost while it sleeps. Two
-free [cron-job.org](https://cron-job.org) jobs handle the rest. One pings `/healthz` during office hours
-so `/play` gets no cold start; the other triggers the 14:00 reminder even if the service is asleep.
+a free web service wakes up when Telegram sends a webhook, so no update is lost while it sleeps. A free
+[Cloudflare Worker](worker/index.ts) with a cron trigger handles the rest: every 10 minutes during office
+hours it calls `/cron/reminder`, which keeps the service awake (no cold start for `/play`) and sends the
+reminder when it's due.
+
+We used two [cron-job.org](https://cron-job.org) jobs before. From 2026-11-05 Render answered their
+requests with `429 Too Many Requests` before they reached the bot, so the service stayed asleep and the
+2026-11-06 reminder was never sent. Those jobs are kept disabled for rollback.
 
 Render free limits to know:
 
@@ -183,18 +199,44 @@ Render free limits to know:
 4. **Deploy and check the logs**. You should see `starting in webhook mode` and
    `webhook set, listening on :10000/telegram, /cron/reminder enabled`. Then open
    `https://<service>.onrender.com/healthz`; it should return `ok`.
-5. **Create two cron-job.org jobs** (free account), both with timezone **Asia/Yerevan**:
-   - **Keep warm**: `GET https://<service>.onrender.com/healthz`, every 10 minutes, Monday to Friday,
-     09:00-19:00.
-   - **Daily reminder**: `GET https://<service>.onrender.com/cron/reminder` with header
-     `Authorization: Bearer <CRON_SECRET>`, Monday to Friday at 14:00 and again at 14:10. The second
-     call is a retry in case the first one timed out during a cold start.
-
-   The endpoint only sends when the current time is within 30 minutes after the configured
-   `REMINDER_TIME`/`REMINDER_DAYS`, and at most once per day. If you change the reminder time in
-   Render, move the cron-job.org schedule too. The in-process cron also fires when the service is
-   awake at 14:00; duplicates are prevented by the same once-per-day check.
+5. **Deploy the Cloudflare cron Worker** (next section).
 6. **Check it in Telegram**: `/help` in a private chat, then `/play` in the group.
+
+### Cloudflare cron Worker
+
+[`worker/`](worker) holds a tiny Worker whose cron trigger calls `GET /cron/reminder` with
+`Authorization: Bearer <CRON_SECRET>` every 10 minutes, Monday to Friday, 09:00-18:50 Asia/Yerevan
+(`*/10 5-14 * * MON-FRI` in UTC, see [`worker/wrangler.jsonc`](worker/wrangler.jsonc)). Cron Triggers
+are included in the Workers free plan.
+
+The endpoint only sends when the current time is within 30 minutes after the configured
+`REMINDER_TIME`/`REMINDER_DAYS`, and at most once per day; otherwise it answers `not due`. The
+in-process cron also fires at 14:00 because the service is awake; duplicates are prevented by the same
+once-per-day check. If you move the reminder outside 09:00-18:50 or to other days, widen the Worker's
+cron too.
+
+One-time setup:
+
+1. In the Cloudflare dashboard, open **My Profile → API Tokens → Create Token** and use the
+   **Edit Cloudflare Workers** template. Under **Account Resources** pick your account; under **Zone
+   Resources** choose **All zones**. Create it and copy the token.
+2. Copy your **Account ID** (Workers & Pages overview, right column).
+3. Put both in `.env` (never committed):
+   ```
+   CLOUDFLARE_API_TOKEN=...
+   CLOUDFLARE_ACCOUNT_ID=...
+   ```
+
+Deploy, then store the secret (same value as the bot's `CRON_SECRET`):
+
+```bash
+set -a && . ./.env && set +a
+npx wrangler@4 deploy -c worker/wrangler.jsonc
+printf %s "$CRON_SECRET" | npx wrangler@4 secret put CRON_SECRET -c worker/wrangler.jsonc
+```
+
+Check runs under **Workers & Pages → zema-games-cron → Logs** (`[cron] /cron/reminder: not due`
+or `sent`), or with `npx wrangler@4 tail -c worker/wrangler.jsonc`.
 
 ### Updating
 
@@ -210,7 +252,7 @@ docker run -d --restart unless-stopped --env-file .env -v zema-games-data:/app/d
 ```
 
 That's long polling by default. On a host that is always on, the in-process reminder is enough and
-no cron-job.org jobs are needed.
+the cron Worker is not needed.
 
 ## Project layout
 
@@ -219,14 +261,15 @@ src/
   index.ts     entry point: config, polling or webhook mode, reminder job
   server.ts    webhook HTTP server: /telegram, /healthz, /cron/reminder
   bot.ts       grammY handlers, chat filter, command menus
-  flow.ts      session state machine (join poll -> game poll -> final message)
+  flow.ts      session state machine (picker -> join poll -> game poll -> final message), many in parallel
   plan.ts      pure logic: game filtering, plan after join, tie-break, group split
   games.ts     games.json loading and validation
   schedule.ts  reminder cron (Asia/Yerevan)
-  store.ts     JSON file store for the active session
+  store.ts     JSON file store for open sessions
   format.ts    mentions, HTML escaping, games list
   texts.ts     every Armenian text
   log.ts       logging with bot-token redaction
 games.json     the game list
+worker/        Cloudflare cron Worker that wakes the service and triggers the reminder
 render.yaml    Render Blueprint (free web service)
 ```

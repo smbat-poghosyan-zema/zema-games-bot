@@ -1,7 +1,7 @@
 import { Bot, type BotConfig, type Context } from 'grammy';
 import type { Config } from './config.js';
 import { escapeHtml, gamesListMessage, toPlayer } from './format.js';
-import { PLAY_CALLBACK, START_NOW_CALLBACK, type FlowApi, type GameFlow } from './flow.js';
+import { LEGACY_START_NOW_CALLBACK, PLAY_CALLBACK, type FlowApi, type GameFlow } from './flow.js';
 import { findGames, type Game } from './games.js';
 import { log } from './log.js';
 import { texts } from './texts.js';
@@ -23,7 +23,7 @@ export function createBot(
   const isPrivate = (ctx: Context) => ctx.chat?.type === 'private';
 
   // Only the Zema Games group and private chats get through. poll / poll_answer updates
-  // carry no chat; the flow ignores polls that don't belong to the active session.
+  // carry no chat; the flow ignores polls that don't belong to an open session.
   bot.use(async (ctx, next) => {
     const kind = Object.keys(ctx.update).find((k) => k !== 'update_id');
     const allowed = !ctx.chat || isGroup(ctx) || isPrivate(ctx);
@@ -59,31 +59,87 @@ export function createBot(
     if (!isGroup(ctx)) return void (await ctx.reply(texts.cancelOnlyInGroup));
     if (!ctx.from) return;
     const result = await flow.cancel(toPlayer(ctx.from));
-    if (result === 'none') await ctx.reply(texts.noActiveSession);
-    if (result === 'forbidden') await ctx.reply(texts.cancelNotAllowed);
+    if (result === 'none') await ctx.reply(texts.noOwnSession);
   });
+
+  // Callback buttons only work in the group; elsewhere they are just acknowledged.
+  const groupCallback = (ctx: Context) => isGroup(ctx) && ctx.from !== undefined;
+  const closed = { text: texts.startNowClosed };
 
   // Inline button under the daily reminder.
   bot.callbackQuery(PLAY_CALLBACK, async (ctx) => {
-    if (!isGroup(ctx)) return void (await ctx.answerCallbackQuery());
+    if (!groupCallback(ctx)) return void (await ctx.answerCallbackQuery());
     const result = await flow.start(toPlayer(ctx.from));
-    await ctx.answerCallbackQuery({
-      text: result === 'started' ? texts.callbackStarted : texts.callbackSessionActive,
-    });
+    await ctx.answerCallbackQuery({ text: result === 'started' ? texts.callbackStarted : texts.callbackOwnActive });
   });
 
-  // "Start now" button under the join poll.
-  bot.callbackQuery(START_NOW_CALLBACK, async (ctx) => {
-    if (!isGroup(ctx)) return void (await ctx.answerCallbackQuery());
-    const result = await flow.startNow(toPlayer(ctx.from));
-    const reply = {
-      started: { text: texts.startNowStarted },
-      tooFew: { text: texts.startNowTooFew(flow.requiredPlayersNow()), show_alert: true },
-      forbidden: { text: texts.startNowForbidden, show_alert: true },
-      none: { text: texts.startNowClosed },
-    }[result];
-    await ctx.answerCallbackQuery(reply);
+  // Game picker: tick a game / done.
+  bot.callbackQuery(/^pick:(\w+):(\d+)$/, async (ctx) => {
+    if (!groupCallback(ctx)) return void (await ctx.answerCallbackQuery());
+    const result = await flow.togglePick(toPlayer(ctx.from), ctx.match[1]!, Number(ctx.match[2]));
+    await ctx.answerCallbackQuery(
+      { ok: {}, none: closed, forbidden: { text: texts.pickerForbidden, show_alert: true } }[result],
+    );
   });
+  bot.callbackQuery(/^pickdone:(\w+)$/, async (ctx) => {
+    if (!groupCallback(ctx)) return void (await ctx.answerCallbackQuery());
+    const result = await flow.finishPicking(toPlayer(ctx.from), ctx.match[1]!);
+    await ctx.answerCallbackQuery(
+      {
+        ok: {},
+        none: closed,
+        empty: { text: texts.pickerEmpty, show_alert: true },
+        forbidden: { text: texts.pickerForbidden, show_alert: true },
+      }[result],
+    );
+  });
+
+  // "Start now" button under a join poll: only its starter.
+  bot.callbackQuery(/^start:(\w+)$/, async (ctx) => {
+    if (!groupCallback(ctx)) return void (await ctx.answerCallbackQuery());
+    const id = ctx.match[1]!;
+    const result = await flow.startNow(toPlayer(ctx.from), id);
+    await ctx.answerCallbackQuery(
+      {
+        ok: { text: texts.startNowStarted },
+        tooFew: { text: texts.startNowTooFew(flow.requiredPlayersFor(id)), show_alert: true },
+        forbidden: { text: texts.startNowForbidden, show_alert: true },
+        none: closed,
+      }[result],
+    );
+  });
+
+  // "Delete" button under a picker or join poll: the starter or an admin.
+  bot.callbackQuery(/^del:(\w+)$/, async (ctx) => {
+    if (!groupCallback(ctx)) return void (await ctx.answerCallbackQuery());
+    const result = await flow.remove(toPlayer(ctx.from), ctx.match[1]!);
+    await ctx.answerCallbackQuery(
+      { ok: { text: texts.deleted }, none: closed, forbidden: { text: texts.deleteForbidden, show_alert: true } }[
+        result
+      ],
+    );
+  });
+
+  // Asked after /play by someone who already has an open session: replace it or keep it.
+  bot.callbackQuery(/^replace:(\w+):(\d*)$/, async (ctx) => {
+    if (!groupCallback(ctx)) return void (await ctx.answerCallbackQuery());
+    const game = ctx.match[2] ? games[Number(ctx.match[2])] : undefined;
+    const result = await flow.replace(toPlayer(ctx.from), ctx.match[1]!, game);
+    if (result === 'forbidden') return void (await ctx.answerCallbackQuery({ text: texts.notYours, show_alert: true }));
+    await ctx.deleteMessage().catch(() => undefined);
+    await ctx.answerCallbackQuery({ text: result === 'started' ? texts.deleted : texts.callbackOwnActive });
+  });
+  bot.callbackQuery(/^keep:(\d+)$/, async (ctx) => {
+    if (!groupCallback(ctx)) return void (await ctx.answerCallbackQuery());
+    if (ctx.from.id !== Number(ctx.match[1])) {
+      return void (await ctx.answerCallbackQuery({ text: texts.notYours, show_alert: true }));
+    }
+    await ctx.deleteMessage().catch(() => undefined);
+    await ctx.answerCallbackQuery();
+  });
+
+  // Button of join polls sent before sessions had ids.
+  bot.callbackQuery(LEGACY_START_NOW_CALLBACK, (ctx) => ctx.answerCallbackQuery(closed));
 
   bot.on('poll_answer', (ctx) => flow.onPollAnswer(ctx.pollAnswer));
   bot.on('poll', (ctx) => flow.onPoll(ctx.poll));
