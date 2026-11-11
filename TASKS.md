@@ -30,7 +30,10 @@
 - [x] Worker zema-games-cron deployed 2026-11-06; first run reached the bot (12:00 UTC, "not due")
 - [x] cron-job.org jobs disabled (kept for rollback)
 - [x] Render GitHub App installed on smbat-poghosyan-zema (auto-deploy on push to main)
-- [ ] Confirm the first Worker-triggered reminder (Mon 2026-11-09 14:00)
+- [x] Mon 2026-11-09 14:00 reminder sent via the Worker
+- [x] Found: Tue 2026-11-10 and Wed 2026-11-11 reminders missed, Render's edge answered the Worker with 429 while asleep
+- [x] Worker sends the reminder through the Telegram Bot API when the bot is unreachable; keep-warm pings /healthz
+- [ ] Confirm the first Telegram-fallback reminder (Thu 2026-11-12 14:00)
 - [x] Game picker before the join poll, final choice among ticked games
 - [x] Parallel sessions: one per starter, starter-only start now, delete by starter or admin
 - [x] Added Bloomgrid and Kitten Kaboom (online)

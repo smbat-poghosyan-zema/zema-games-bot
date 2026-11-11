@@ -1,17 +1,21 @@
-// Cloudflare Worker (free plan) that keeps the Render service awake and triggers the reminder.
+// Cloudflare Worker (free plan) that keeps the Render service awake and sends the daily reminder.
 // Deploy: npx wrangler@4 deploy -c worker/wrangler.jsonc (see README, "Cloudflare cron Worker").
 {
   "name": "zema-games-cron",
   "main": "index.ts",
   "compatibility_date": "2025-10-01",
-  // No public URL: the Worker only runs on its cron trigger.
+  // No public URL: the Worker only runs on its cron triggers.
   "workers_dev": false,
   "vars": {
-    "BOT_URL": "https://zema-games-bot.onrender.com"
+    "BOT_URL": "https://zema-games-bot.onrender.com",
+    // Must match the reminder entry in triggers.crons below.
+    "REMINDER_CRON": "0 10 * * MON-FRI"
   },
   "triggers": {
-    // UTC. Every 10 minutes, Mon-Fri 05:00-14:50 UTC = 09:00-18:50 Asia/Yerevan (UTC+4, no DST).
-    "crons": ["*/10 5-14 * * MON-FRI"]
+    // UTC. Asia/Yerevan is UTC+4 with no DST.
+    // - keep-warm: every 10 minutes, Mon-Fri 05:00-14:50 UTC = 09:00-18:50 Yerevan.
+    // - reminder: 10:00 UTC = 14:00 Yerevan, the bot's REMINDER_TIME. Change both together.
+    "crons": ["*/10 5-14 * * MON-FRI", "0 10 * * MON-FRI"]
   },
   "observability": { "enabled": true }
 }

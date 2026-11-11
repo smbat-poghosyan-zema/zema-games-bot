@@ -204,16 +204,22 @@ Render free limits to know:
 
 ### Cloudflare cron Worker
 
-[`worker/`](worker) holds a tiny Worker whose cron trigger calls `GET /cron/reminder` with
-`Authorization: Bearer <CRON_SECRET>` every 10 minutes, Monday to Friday, 09:00-18:50 Asia/Yerevan
-(`*/10 5-14 * * MON-FRI` in UTC, see [`worker/wrangler.jsonc`](worker/wrangler.jsonc)). Cron Triggers
-are included in the Workers free plan.
+[`worker/`](worker) holds a tiny Worker with two cron triggers (UTC, see
+[`worker/wrangler.jsonc`](worker/wrangler.jsonc)). Cron Triggers are included in the Workers free plan.
 
-The endpoint only sends when the current time is within 30 minutes after the configured
-`REMINDER_TIME`/`REMINDER_DAYS`, and at most once per day; otherwise it answers `not due`. The
-in-process cron also fires at 14:00 because the service is awake; duplicates are prevented by the same
-once-per-day check. If you move the reminder outside 09:00-18:50 or to other days, widen the Worker's
-cron too.
+- **Keep-warm**, `*/10 5-14 * * MON-FRI` (every 10 minutes, Monday to Friday, 09:00-18:50 Asia/Yerevan):
+  `GET /healthz`, so the service doesn't sleep during office hours.
+- **Reminder**, `0 10 * * MON-FRI` (14:00 Asia/Yerevan): `GET /cron/reminder` with
+  `Authorization: Bearer <CRON_SECRET>`. The bot sends the reminder with its own rules (skipped while a
+  session is open, at most once per day). If the bot can't be reached after 3 attempts, the Worker sends
+  the reminder itself through the Telegram Bot API, with the same texts and Play button.
+
+The fallback exists because Render's edge answers `429` with a "Just a moment..." challenge to
+automated requests that would wake a sleeping service (it blocked cron-job.org first, then the Worker).
+Telegram's webhook still wakes the service, so pressing Play works either way.
+
+The reminder cron must match `REMINDER_TIME`/`REMINDER_DAYS`: if you change one, change the reminder
+entry in `triggers.crons` and `REMINDER_CRON` in `wrangler.jsonc` too.
 
 One-time setup:
 
@@ -233,10 +239,12 @@ Deploy, then store the secret (same value as the bot's `CRON_SECRET`):
 set -a && . ./.env && set +a
 npx wrangler@4 deploy -c worker/wrangler.jsonc
 printf %s "$CRON_SECRET" | npx wrangler@4 secret put CRON_SECRET -c worker/wrangler.jsonc
+printf %s "$TELEGRAM_BOT_TOKEN" | npx wrangler@4 secret put TELEGRAM_BOT_TOKEN -c worker/wrangler.jsonc
+printf %s "$TELEGRAM_CHAT_ID" | npx wrangler@4 secret put TELEGRAM_CHAT_ID -c worker/wrangler.jsonc
 ```
 
-Check runs under **Workers & Pages → zema-games-cron → Logs** (`[cron] /cron/reminder: not due`
-or `sent`), or with `npx wrangler@4 tail -c worker/wrangler.jsonc`.
+Check runs under **Workers & Pages → zema-games-cron → Logs** (`[cron] reminder: bot: sent`,
+`[cron] reminder: sent directly via Telegram` or `[cron] keep-warm: healthz HTTP 200`), or with `npx wrangler@4 tail -c worker/wrangler.jsonc`.
 
 ### Updating
 
@@ -270,6 +278,6 @@ src/
   texts.ts     every Armenian text
   log.ts       logging with bot-token redaction
 games.json     the game list
-worker/        Cloudflare cron Worker that wakes the service and triggers the reminder
+worker/        Cloudflare cron Worker that keeps the service awake and sends the reminder
 render.yaml    Render Blueprint (free web service)
 ```
