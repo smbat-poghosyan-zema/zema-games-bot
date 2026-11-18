@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { log } from './log.js';
 
 export interface ServerOptions {
   /** Path Telegram posts updates to. */
@@ -29,7 +30,19 @@ export function createHttpServer(opts: ServerOptions): Server {
   return createServer((req, res) => {
     const path = (req.url ?? '').split('?')[0];
 
-    if (req.method === 'POST' && path === opts.webhookPath) return void opts.onUpdate(req, res);
+    if (req.method === 'POST' && path === opts.webhookPath) {
+      // grammY rethrows handler errors in webhook mode (bot.catch only covers polling) and then never
+      // ends the response. Telegram would time out and redeliver the same update forever, and with
+      // max_connections 1 every later update waits behind it. Always answer 200 so it moves on.
+      Promise.resolve()
+        .then(() => opts.onUpdate(req, res))
+        .catch((err: unknown) => {
+          log.error('[bot] error while handling webhook update:', err instanceof Error ? err.message : err);
+          if (!res.headersSent) res.writeHead(200);
+          if (!res.writableEnded) res.end();
+        });
+      return;
+    }
 
     if ((req.method === 'GET' || req.method === 'HEAD') && path === '/healthz') {
       return void res.writeHead(200, { 'content-type': 'text/plain' }).end('ok');
