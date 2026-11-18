@@ -26,6 +26,21 @@ describe('webhook HTTP server', () => {
     expect((await fetch(`${base}/telegram`)).status).toBe(404);
   });
 
+  it('answers 200 when the update handler throws, so Telegram does not redeliver it', async () => {
+    const onUpdate = vi.fn(async () => {
+      throw new Error('query is too old');
+    });
+    const server = createHttpServer({ webhookPath: '/telegram', onUpdate, onReminder: async () => 'sent' });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    close = () => server.close();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const res = await fetch(`${base}/telegram`, { method: 'POST', body: '{}', signal: AbortSignal.timeout(2000) });
+    expect(res.status).toBe(200);
+    expect(error).toHaveBeenCalledOnce();
+    error.mockRestore();
+  });
+
   it('runs the reminder only with the right bearer token', async () => {
     const { base, onReminder } = await start(SECRET);
     expect((await fetch(`${base}/cron/reminder`)).status).toBe(401);

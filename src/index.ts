@@ -49,7 +49,12 @@ async function main(): Promise<void> {
 
   if (config.mode === 'webhook') {
     const wh = config.webhook!;
-    const handle = webhookCallback(bot, 'http', { secretToken: wh.secret });
+    const handle = webhookCallback(bot, 'http', {
+      secretToken: wh.secret,
+      // Slow updates (e.g. right after a cold start) are acknowledged after 10 s and keep running,
+      // instead of failing the request and being redelivered by Telegram.
+      onTimeout: 'return',
+    });
     const server = createHttpServer({
       webhookPath: wh.path,
       onUpdate: handle,
