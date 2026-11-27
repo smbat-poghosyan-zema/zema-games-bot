@@ -33,7 +33,7 @@ built-in games, and is forgotten when the session ends. Nothing is saved beyond 
 - **Button:** a "+ Add game" row in the picker keyboard (`add:<sid>`). Someone other than the
   starter gets the existing "only the starter" alert. The starter gets a force-reply prompt
   replying to the picker, with an example of the format. One open prompt per session: a second tap
-  reuses it.
+  replaces it, so a prompt deleted by hand can't block adding.
 - **Reply:** a message in the group that replies to the session's prompt and comes from the
   starter is parsed. Replies from others are ignored.
 - **`/add <text>`:** the same parsing, for the sender's own session while it's in the picker stage.

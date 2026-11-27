@@ -542,7 +542,7 @@ describe('GameFlow', () => {
       return { id, prompt: own(flow, ann).picker!.promptMessageId! };
     }
 
-    it('asks only the starter, with a force-reply prompt, and reuses an open prompt', async () => {
+    it('asks only the starter, with a force-reply prompt, and replaces an open prompt', async () => {
       const { api, sent } = fakeApi();
       const flow = makeFlow(api);
       const { id, prompt } = await openPrompt(flow);
@@ -551,8 +551,9 @@ describe('GameFlow', () => {
         extra: { reply_markup: { force_reply: true, selective: true } },
       });
       expect(await flow.askAddGame(ann, id)).toBe('ok');
-      expect(own(flow, ann).picker!.promptMessageId).toBe(prompt);
-      expect(sent).toHaveLength(2);
+      expect(api.deleteMessage).toHaveBeenCalledWith(CHAT, prompt);
+      expect(own(flow, ann).picker!.promptMessageId).not.toBe(prompt);
+      expect(sent).toHaveLength(3);
       expect(await flow.askAddGame(bob, id)).toBe('forbidden');
       expect(await flow.askAddGame(ann, 'nope')).toBe('none');
     });

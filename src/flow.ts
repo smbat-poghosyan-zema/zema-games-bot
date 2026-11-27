@@ -49,6 +49,8 @@ export interface FlowOptions {
 const HTML = { parse_mode: 'HTML' } as const;
 /** Telegram's limit for poll questions. */
 const MAX_POLL_QUESTION = 300;
+/** Telegram's limit for poll options. */
+const MAX_POLL_OPTIONS = 12;
 /** Games the starter can add to one session's picker. */
 export const MAX_ADDED_GAMES = 4;
 
@@ -247,8 +249,8 @@ export class GameFlow {
       if (!session || session.stage !== 'picking' || !session.picker) return 'none';
       if (session.starter.id !== by.id) return 'forbidden';
       if ((session.addedGames?.length ?? 0) >= MAX_ADDED_GAMES) return 'limit';
-      // A second tap reuses the prompt that is already open.
-      if (session.picker.promptMessageId === undefined) await this.sendAddPrompt(session, false);
+      // Each tap posts a fresh prompt (replacing an open one), so a prompt deleted by hand can't block adding.
+      await this.sendAddPrompt(session, false);
       return 'ok';
     });
   }
@@ -616,7 +618,8 @@ export class GameFlow {
 
       case 'vote': {
         const minutes = Math.round(this.opts.gamePollSeconds / 60);
-        const options = plan.games.map((g) => g.name);
+        // Catalog plus added games could exceed Telegram's option limit; keep the first ones.
+        const options = plan.games.map((g) => g.name).slice(0, MAX_POLL_OPTIONS);
         const msg = await this.api.sendPoll(
           chatId,
           texts.gamePollQuestion(players.length, minutes),
