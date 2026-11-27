@@ -152,7 +152,7 @@ describe('bot handlers', () => {
     await bot.handleUpdate(message(group, '/play chess'));
     expect(calls[0]!.method).toBe('sendMessage');
     expect(String(calls[0]!.payload.text)).toBe(
-      texts.gameNotFound('Blokus, Azul, Exploding Kittens, Spot it, Gartic Phone, Bloomgrid, Kitten Kaboom'),
+      texts.gameNotFound('Blokus, Azul, Exploding Kittens, Spot it, Gartic Phone, Bloomgrid, Kitten Kaboom, Labyrinth'),
     );
   });
 

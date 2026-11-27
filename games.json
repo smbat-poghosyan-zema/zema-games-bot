@@ -66,5 +66,16 @@
     "description": "Exploding Kittens-ի օնլայն տարբերակը. քաշիր քարտեր և մի՛ քաշիր պայթող կատվին։",
     "link": "https://kitten-kaboom.onrender.com/",
     "source": "Site meta description: real-time multiplayer card game for 2-10 players (https://kitten-kaboom.onrender.com/). Duration 20-30 min set by the team."
+  },
+  {
+    "name": "Labyrinth",
+    "type": "online",
+    "minPlayers": 2,
+    "maxPlayers": 4,
+    "durationMinutes": 20,
+    "maxDurationMinutes": 30,
+    "description": "Մրցավազք լաբիրինթոսում. հասիր հակառակ կողմին առաջինը և պատերով փակիր մյուսների ճանապարհը։",
+    "link": "https://labyrinth-pgk2.onrender.com/",
+    "source": "Site meta description: race-and-barrier board game for 2-4 players, on one device or online (https://labyrinth-pgk2.onrender.com/). Duration 20-30 min set by the team."
   }
 ]
