@@ -37,3 +37,4 @@
 - [x] Game picker before the join poll, final choice among ticked games
 - [x] Parallel sessions: one per starter, starter-only start now, delete by starter or admin
 - [x] Added Bloomgrid and Kitten Kaboom (online)
+- [x] Added Labyrinth (online)

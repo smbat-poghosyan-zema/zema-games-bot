@@ -174,7 +174,7 @@ describe('parseGames', () => {
     );
   });
 
-  it('games.json has all seven games with player counts and sources', () => {
+  it('games.json has all eight games with player counts and sources', () => {
     const real = loadGames();
     expect(names(real)).toEqual([
       'Blokus',
@@ -184,6 +184,7 @@ describe('parseGames', () => {
       'Gartic Phone',
       'Bloomgrid',
       'Kitten Kaboom',
+      'Labyrinth',
     ]);
     for (const g of real) expect(g.source.length).toBeGreaterThan(10);
   });
