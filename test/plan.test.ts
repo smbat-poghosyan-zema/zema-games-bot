@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findGames, gamesForPlayers, loadGames, parseGames } from '../src/games.js';
+import { findGames, gamesForPlayers, loadGames, parseAddedGame, parseGames, sameGameName } from '../src/games.js';
 import { balancedSizes, dealIntoGroups, planAfterJoin, planSplit, requiredPlayers, resolveVote } from '../src/plan.js';
 import { game, seq } from './helpers.js';
 
@@ -187,5 +187,26 @@ describe('parseGames', () => {
       'Labyrinth',
     ]);
     for (const g of real) expect(g.source.length).toBeGreaterThan(10);
+  });
+});
+
+describe('parseAddedGame', () => {
+  it('reads a name with a player range or an exact count', () => {
+    expect(parseAddedGame('Codenames 4-8')).toEqual({ name: 'Codenames', minPlayers: 4, maxPlayers: 8 });
+    expect(parseAddedGame('  Ticket to  Ride 2 — 5 ')).toEqual({ name: 'Ticket to Ride', minPlayers: 2, maxPlayers: 5 });
+    expect(parseAddedGame('Chess 2')).toEqual({ name: 'Chess', minPlayers: 2, maxPlayers: 2 });
+    expect(parseAddedGame('7 Wonders 3-7')).toEqual({ name: '7 Wonders', minPlayers: 3, maxPlayers: 7 });
+    expect(parseAddedGame('Մաֆիա 6-12')).toEqual({ name: 'Մաֆիա', minPlayers: 6, maxPlayers: 12 });
+  });
+
+  it('rejects text without a valid count or name', () => {
+    for (const text of ['Codenames', '4-8', 'Codenames 8-4', 'Codenames 0-3', 'Codenames 2-51', '!!! 2-4', `${'x'.repeat(41)} 2-4`, '']) {
+      expect(parseAddedGame(text), text).toBeNull();
+    }
+  });
+
+  it('compares names ignoring case, spaces and punctuation', () => {
+    expect(sameGameName('Spot it', 'spot-it!')).toBe(true);
+    expect(sameGameName('Azul', 'Azul 2')).toBe(false);
   });
 });

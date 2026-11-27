@@ -1,5 +1,5 @@
 import type { User } from 'grammy/types';
-import type { Game } from './games.js';
+import type { Game, PlayableGame } from './games.js';
 import { texts } from './texts.js';
 
 /** Minimal player info kept in the session store. */
@@ -37,11 +37,11 @@ export function mentionAll(players: readonly Player[]): string {
   return players.map(mention).join(', ');
 }
 
-export function gameNames(games: readonly Game[]): string {
+export function gameNames(games: readonly PlayableGame[]): string {
   return games.map((g) => escapeHtml(g.name)).join(', ');
 }
 
-export function playersRange(g: Game): string {
+export function playersRange(g: PlayableGame): string {
   return g.minPlayers === g.maxPlayers ? `${g.minPlayers}` : `${g.minPlayers}-${g.maxPlayers}`;
 }
 
@@ -66,7 +66,7 @@ export function gamesListMessage(games: readonly Game[]): string {
 }
 
 /** Final "team is set" message for a single chosen game. */
-export function teamReadyMessage(game: Game, players: readonly Player[]): string {
+export function teamReadyMessage(game: PlayableGame, players: readonly Player[]): string {
   return texts.teamReady({
     game: escapeHtml(game.name),
     mentions: mentionAll(players),

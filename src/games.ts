@@ -3,19 +3,27 @@ import { fileURLToPath } from 'node:url';
 
 export type GameType = 'physical' | 'online';
 
-export interface Game {
+/** What a game session needs to know about a game: catalog games and games added in the picker both fit. */
+export interface PlayableGame {
   name: string;
-  type: GameType;
   minPlayers: number;
   maxPlayers: number;
+  /** Link to play (online games only). */
+  link?: string;
+}
+
+/** A game the session starter typed in the picker, kept for that session only. */
+export type AddedGame = Pick<PlayableGame, 'name' | 'minPlayers' | 'maxPlayers'>;
+
+/** A catalog game from games.json. */
+export interface Game extends PlayableGame {
+  type: GameType;
   /** Average play time in minutes (the lower end when `maxDurationMinutes` is set). */
   durationMinutes: number;
   /** Upper end of the play time, for games listed as a range like 20-30 minutes. */
   maxDurationMinutes?: number;
   /** One-line description in Armenian. */
   description: string;
-  /** Link to play (online games only). */
-  link?: string;
   /** Where player counts and duration come from. */
   source: string;
 }
@@ -65,6 +73,29 @@ export function loadGames(path = DEFAULT_GAMES_PATH): Game[] {
 
 const normalize = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
+/** True when two game names are the same, ignoring case, spaces and punctuation. */
+export function sameGameName(a: string, b: string): boolean {
+  return normalize(a) === normalize(b);
+}
+
+export const MAX_ADDED_NAME_LENGTH = 40;
+export const MAX_ADDED_PLAYERS = 50;
+
+/**
+ * Parses a game typed in the picker: "<name> <min>-<max>" or "<name> <count>",
+ * e.g. "Codenames 4-8" or "Chess 2". Returns null when the text doesn't fit that format.
+ */
+export function parseAddedGame(text: string): AddedGame | null {
+  const match = /^(.+?)\s+(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?$/su.exec(text.trim());
+  if (!match) return null;
+  const name = match[1]!.replace(/\s+/g, ' ').trim();
+  const minPlayers = Number(match[2]);
+  const maxPlayers = match[3] === undefined ? minPlayers : Number(match[3]);
+  if (!normalize(name) || name.length > MAX_ADDED_NAME_LENGTH) return null;
+  if (minPlayers < 1 || minPlayers > maxPlayers || maxPlayers > MAX_ADDED_PLAYERS) return null;
+  return { name, minPlayers, maxPlayers };
+}
+
 /**
  * Finds games by a user-typed name: case-insensitive, ignores spaces and punctuation,
  * accepts partial names ("kittens", "spot"). An exact match wins over partial ones.
@@ -77,6 +108,6 @@ export function findGames(games: readonly Game[], query: string): Game[] {
 }
 
 /** Games that can be played by exactly `players` people. */
-export function gamesForPlayers(games: readonly Game[], players: number): Game[] {
+export function gamesForPlayers<T extends PlayableGame>(games: readonly T[], players: number): T[] {
   return games.filter((g) => g.minPlayers <= players && players <= g.maxPlayers);
 }

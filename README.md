@@ -11,8 +11,13 @@ All bot texts are Armenian and live in [`src/texts.ts`](src/texts.ts).
 ## How a session works
 
 1. `/play` in the group (or the **🎲 Սկսել խաղը** button under the daily reminder) posts a game picker:
-   one checkbox button per game, plus **✔️ Պատրաստ է** (done) and **🗑 Ջնջել** (delete). Only the
-   starter can tick games. An unfinished picker is dropped after 5 minutes.
+   one checkbox button per game, plus **➕ Ավելացնել խաղ** (add game), **✔️ Պատրաստ է** (done) and
+   **🗑 Ջնջել** (delete). Only the starter can tick games. An unfinished picker is dropped after 5 minutes.
+   **Adding a game for this round:** the starter taps **➕ Ավելացնել խաղ** and replies to the bot's
+   prompt with a name and player count (`Codenames 4-8`, or `Chess 2` for an exact count), or types
+   `/add Codenames 4-8`. The game appears in the picker already ticked and then works like any other
+   game (player-count filter, vote, group split). It is not saved: it's gone when the session ends.
+   Up to 4 per session; a name that's already in the picker ticks that game instead of adding a copy.
 2. After Done, the bot posts a native, non-anonymous poll that names the starter and the ticked games
    and closes after 10 minutes. Ticking a single game works like `/play <game>` (below).
    Under the poll, **▶️ Սկսել հիմա** (start now) closes it early once at least 2 people joined; only
@@ -34,7 +39,8 @@ only one open at a time. Running `/play` again asks whether to delete the open o
 (**🗑 Ջնջել և բացել նորը** / **Թողնել**); nothing is deleted without that confirmation. A player may
 join several polls. The daily reminder is skipped while any session is open.
 
-Commands: `/play`, `/play <game>`, `/games`, `/cancel` (deletes your own open session), `/help`.
+Commands: `/play`, `/play <game>`, `/add <game> <players>` (while your picker is open), `/games`,
+`/cancel` (deletes your own open session), `/help`.
 
 `/play <game>` (e.g. `/play Azul`, `/play kittens`; case-insensitive, partial names work) skips the
 picker and the vote. When the poll closes: fewer than the game's minimum ends the session, within its
@@ -86,6 +92,8 @@ Add the bot to the group **as an admin** (no special rights are needed). Bots in
 `/play` in a group if they were the last bot to post there or the command is written as
 `/play@zemagames_bot`. Admin bots receive every message. Disabling privacy mode in @BotFather
 (`/setprivacy`) also works.
+Optional: give it the **Delete messages** right so it can also remove the replies people send to its
+"add game" prompt. Without it those replies just stay in the chat.
 
 ## Environment variables
 

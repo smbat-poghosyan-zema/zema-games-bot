@@ -1,7 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import type { Api } from 'grammy';
 import type { InlineKeyboardButton, Poll, PollAnswer } from 'grammy/types';
-import { gamesForPlayers, type Game } from './games.js';
+import {
+  gamesForPlayers,
+  MAX_ADDED_NAME_LENGTH,
+  MAX_ADDED_PLAYERS,
+  parseAddedGame,
+  sameGameName,
+  type Game,
+  type PlayableGame,
+} from './games.js';
 import {
   displayName,
   escapeHtml,
@@ -41,6 +49,10 @@ export interface FlowOptions {
 const HTML = { parse_mode: 'HTML' } as const;
 /** Telegram's limit for poll questions. */
 const MAX_POLL_QUESTION = 300;
+/** Telegram's limit for poll options. */
+const MAX_POLL_OPTIONS = 12;
+/** Games the starter can add to one session's picker. */
+export const MAX_ADDED_GAMES = 4;
 
 /**
  * Callback data. Session ids are short, so every payload stays well under Telegram's 64 bytes.
@@ -52,6 +64,7 @@ export const LEGACY_START_NOW_CALLBACK = 'start_now';
 export const callbacks = {
   pick: (sid: string, gameIndex: number) => `pick:${sid}:${gameIndex}`,
   pickDone: (sid: string) => `pickdone:${sid}`,
+  addGame: (sid: string) => `add:${sid}`,
   start: (sid: string) => `start:${sid}`,
   remove: (sid: string) => `del:${sid}`,
   /** Delete the starter's open session `sid` and open a new one (optionally with a game). */
@@ -61,6 +74,7 @@ export const callbacks = {
 
 export type StartResult = 'started' | 'own';
 export type ActionResult = 'ok' | 'none' | 'forbidden';
+export type AddResult = 'ok' | 'invalid' | 'limit';
 
 /**
  * Drives game sessions. Anyone in the group can open one, at most one per person:
@@ -121,12 +135,17 @@ export class GameFlow {
     return requiredPlayers(this.chosenGame(this.session(id)));
   }
 
-  private chosenGame(session: Session | undefined): Game | undefined {
-    return session?.chosenGame ? this.findGame(session.chosenGame) : undefined;
+  private chosenGame(session: Session | undefined): PlayableGame | undefined {
+    return session?.chosenGame ? this.findGame(session, session.chosenGame) : undefined;
   }
 
-  private findGame(name: string): Game | undefined {
-    return this.games.find((g) => g.name === name);
+  /** Catalog games plus the games added in this session's picker, in picker order. */
+  private gamesOf(session: Pick<Session, 'addedGames'>): PlayableGame[] {
+    return [...this.games, ...(session.addedGames ?? [])];
+  }
+
+  private findGame(session: Session, name: string): PlayableGame | undefined {
+    return this.gamesOf(session).find((g) => g.name === name);
   }
 
   /**
@@ -190,7 +209,7 @@ export class GameFlow {
       const minutes = Math.round(this.pickerSeconds / 60);
       const msg = await this.api.sendMessage(this.opts.chatId, texts.pickerPrompt(mention(starter), minutes), {
         ...HTML,
-        reply_markup: { inline_keyboard: this.pickerKeyboard(id, []) },
+        reply_markup: { inline_keyboard: this.pickerKeyboard(id, this.games, []) },
       });
       this.store.update((s) => {
         s.sessions.push({
@@ -206,22 +225,60 @@ export class GameFlow {
   togglePick(by: Player, id: string, gameIndex: number): Promise<ActionResult> {
     return this.exclusive(async () => {
       const session = this.session(id);
-      const game = this.games[gameIndex];
+      const games = session ? this.gamesOf(session) : [];
+      const game = games[gameIndex];
       if (!session || session.stage !== 'picking' || !session.picker || !game) return 'none';
       if (session.starter.id !== by.id) return 'forbidden';
 
       const was = session.picker.selected;
       const selected = was.includes(game.name) ? was.filter((n) => n !== game.name) : [...was, game.name];
-      // Keep catalog order so the join poll lists games the same way every time.
-      const ordered = this.games.map((g) => g.name).filter((n) => selected.includes(n));
+      // Keep picker order so the join poll lists games the same way every time.
+      const ordered = games.map((g) => g.name).filter((n) => selected.includes(n));
       this.updateSession(id, (s) => {
         s.picker!.selected = ordered;
       });
-      await this.api
-        .editMessageReplyMarkup(this.opts.chatId, session.picker.messageId, {
-          reply_markup: { inline_keyboard: this.pickerKeyboard(id, ordered) },
-        })
-        .catch((err) => log.warn('[flow] could not update picker:', err));
+      await this.redrawPicker(session.picker.messageId, id, games, ordered);
+      return 'ok';
+    });
+  }
+
+  /** "+ Add game" in the picker: asks the starter to reply with a name and player count. */
+  askAddGame(by: Player, id: string): Promise<ActionResult | 'limit'> {
+    return this.exclusive(async () => {
+      const session = this.session(id);
+      if (!session || session.stage !== 'picking' || !session.picker) return 'none';
+      if (session.starter.id !== by.id) return 'forbidden';
+      if ((session.addedGames?.length ?? 0) >= MAX_ADDED_GAMES) return 'limit';
+      // Each tap posts a fresh prompt (replacing an open one), so a prompt deleted by hand can't block adding.
+      await this.sendAddPrompt(session, false);
+      return 'ok';
+    });
+  }
+
+  /**
+   * A group message that replies to `replyTo`. When it answers an open "+ Add game" prompt and
+   * comes from that session's starter, the game is added; other messages are ignored ('none').
+   */
+  addGameFromReply(by: Player, replyTo: number, text: string, messageId: number): Promise<AddResult | 'none'> {
+    return this.exclusive(async () => {
+      const session = this.sessions.find((s) => s.stage === 'picking' && s.picker?.promptMessageId === replyTo);
+      if (!session || session.starter.id !== by.id) return 'none';
+      return this.applyAddedGame(session, text, messageId);
+    });
+  }
+
+  /** /add [name range]: adds a game to the sender's open picker, or asks for it when `text` is empty. */
+  addGameByCommand(by: Player, text: string, messageId: number): Promise<AddResult | 'noPicker'> {
+    return this.exclusive(async () => {
+      const session = this.sessions.find((s) => s.starter.id === by.id && s.stage === 'picking' && s.picker);
+      if (!session) return 'noPicker';
+      if (text.trim()) return this.applyAddedGame(session, text, messageId);
+      if ((session.addedGames?.length ?? 0) >= MAX_ADDED_GAMES) {
+        await this.api.sendMessage(this.opts.chatId, texts.addGameLimit(MAX_ADDED_GAMES), HTML);
+        return 'limit';
+      }
+      await this.deleteQuietly(messageId);
+      await this.sendAddPrompt(session, false);
       return 'ok';
     });
   }
@@ -239,6 +296,7 @@ export class GameFlow {
       const choice = selected.length === 1 ? { chosenGame: selected[0]! } : { candidates: selected };
       const join = await this.sendJoinPoll({ ...session, ...choice });
       await this.removeMessage(session.picker.messageId);
+      if (session.picker.promptMessageId !== undefined) await this.deleteQuietly(session.picker.promptMessageId);
       this.updateSession(id, (s) => {
         s.stage = 'joining';
         delete s.picker;
@@ -346,18 +404,96 @@ export class GameFlow {
     return new Date(this.now().getTime() + seconds * 1000).toISOString();
   }
 
-  private pickerKeyboard(id: string, selected: readonly string[]): InlineKeyboardButton[][] {
-    const buttons = this.games.map((g, i) => ({
+  private pickerKeyboard(
+    id: string,
+    games: readonly PlayableGame[],
+    selected: readonly string[],
+  ): InlineKeyboardButton[][] {
+    const buttons = games.map((g, i) => ({
       text: `${selected.includes(g.name) ? '✅' : '⬜'} ${g.name}`,
       callback_data: callbacks.pick(id, i),
     }));
     const rows: InlineKeyboardButton[][] = [];
     for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2));
+    rows.push([{ text: texts.addGameButton, callback_data: callbacks.addGame(id) }]);
     rows.push([
       { text: texts.pickerDoneButton, callback_data: callbacks.pickDone(id) },
       { text: texts.deleteButton, callback_data: callbacks.remove(id) },
     ]);
     return rows;
+  }
+
+  private async redrawPicker(
+    messageId: number,
+    id: string,
+    games: readonly PlayableGame[],
+    selected: readonly string[],
+  ): Promise<void> {
+    await this.api
+      .editMessageReplyMarkup(this.opts.chatId, messageId, {
+        reply_markup: { inline_keyboard: this.pickerKeyboard(id, games, selected) },
+      })
+      .catch((err) => log.warn('[flow] could not update picker:', err));
+  }
+
+  /**
+   * Posts the force-reply prompt for adding a game (replacing an open one). Only the starter,
+   * mentioned in the text, gets the reply field (`selective`).
+   */
+  private async sendAddPrompt(session: Session, invalid: boolean): Promise<void> {
+    const old = session.picker?.promptMessageId;
+    if (old !== undefined) await this.deleteQuietly(old);
+    const who = mention(session.starter);
+    const text = invalid
+      ? texts.addGameInvalid(who, MAX_ADDED_NAME_LENGTH, MAX_ADDED_PLAYERS)
+      : texts.addGamePrompt(who);
+    const msg = await this.api.sendMessage(this.opts.chatId, text, {
+      ...HTML,
+      reply_markup: { force_reply: true, selective: true, input_field_placeholder: texts.addGamePlaceholder },
+    });
+    this.updateSession(session.id, (s) => {
+      if (s.picker) s.picker.promptMessageId = msg.message_id;
+    });
+  }
+
+  /**
+   * Adds the typed game to the session's picker and ticks it. A name that matches a game
+   * already in the picker ticks that game instead of adding a copy.
+   */
+  private async applyAddedGame(session: Session, text: string, messageId: number): Promise<AddResult> {
+    const picker = session.picker!;
+    const parsed = parseAddedGame(text);
+    if (!parsed) {
+      await this.deleteQuietly(messageId);
+      await this.sendAddPrompt(session, true);
+      return 'invalid';
+    }
+
+    const existing = this.gamesOf(session).find((g) => sameGameName(g.name, parsed.name));
+    const added = session.addedGames ?? [];
+    if (!existing && added.length >= MAX_ADDED_GAMES) {
+      await this.api.sendMessage(this.opts.chatId, texts.addGameLimit(MAX_ADDED_GAMES), HTML);
+      return 'limit';
+    }
+
+    const name = existing?.name ?? parsed.name;
+    const addedGames = existing ? added : [...added, parsed];
+    const games = this.gamesOf({ addedGames });
+    const selected = games.map((g) => g.name).filter((n) => n === name || picker.selected.includes(n));
+    this.updateSession(session.id, (s) => {
+      s.addedGames = addedGames;
+      s.picker!.selected = selected;
+      delete s.picker!.promptMessageId;
+    });
+    await this.redrawPicker(picker.messageId, session.id, games, selected);
+    if (picker.promptMessageId !== undefined) await this.deleteQuietly(picker.promptMessageId);
+    await this.deleteQuietly(messageId);
+    return 'ok';
+  }
+
+  /** Deletes a message, ignoring failures (missing rights, already deleted). */
+  private async deleteQuietly(messageId: number): Promise<void> {
+    await this.api.deleteMessage(this.opts.chatId, messageId).catch(() => undefined);
   }
 
   private async sendJoinPoll(session: Session): Promise<PollRef> {
@@ -407,6 +543,7 @@ export class GameFlow {
   private async discard(session: Session): Promise<void> {
     this.removeSession(session.id);
     await this.removeMessage(this.currentMessageId(session));
+    if (session.picker?.promptMessageId !== undefined) await this.deleteQuietly(session.picker.promptMessageId);
   }
 
   private async isAdmin(userId: number): Promise<boolean> {
@@ -447,9 +584,9 @@ export class GameFlow {
     const players = session.players;
     const chosen = this.chosenGame(session);
     const candidates = session.candidates
-      ?.map((name) => this.findGame(name))
-      .filter((g): g is Game => g !== undefined);
-    const pool = candidates && candidates.length > 0 ? candidates : this.games;
+      ?.map((name) => this.findGame(session, name))
+      .filter((g): g is PlayableGame => g !== undefined);
+    const pool: readonly PlayableGame[] = candidates && candidates.length > 0 ? candidates : this.games;
     const plan = planAfterJoin(pool, players.length, chosen);
     // Drop the "start now" / "delete" buttons from the closed join poll.
     await this.api.editMessageReplyMarkup(this.opts.chatId, session.join!.messageId).catch(() => undefined);
@@ -481,7 +618,8 @@ export class GameFlow {
 
       case 'vote': {
         const minutes = Math.round(this.opts.gamePollSeconds / 60);
-        const options = plan.games.map((g) => g.name);
+        // Catalog plus added games could exceed Telegram's option limit; keep the first ones.
+        const options = plan.games.map((g) => g.name).slice(0, MAX_POLL_OPTIONS);
         const msg = await this.api.sendPoll(
           chatId,
           texts.gamePollQuestion(players.length, minutes),
@@ -547,7 +685,7 @@ export class GameFlow {
     }
 
     const result = resolveVote(vote.options.map((text, i) => ({ text, votes: counts[i]! })), this.rng);
-    const game = this.findGame(result.winner);
+    const game = this.findGame(session, result.winner);
     this.removeSession(session.id);
     if (!game) throw new Error(`Voted game "${result.winner}" is no longer in games.json`);
 

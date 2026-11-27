@@ -1,7 +1,7 @@
 import { Bot, type BotConfig, type Context } from 'grammy';
 import type { Config } from './config.js';
 import { escapeHtml, gamesListMessage, toPlayer } from './format.js';
-import { LEGACY_START_NOW_CALLBACK, PLAY_CALLBACK, type FlowApi, type GameFlow } from './flow.js';
+import { LEGACY_START_NOW_CALLBACK, MAX_ADDED_GAMES, PLAY_CALLBACK, type FlowApi, type GameFlow } from './flow.js';
 import { findGames, type Game } from './games.js';
 import { log } from './log.js';
 import { texts } from './texts.js';
@@ -55,6 +55,14 @@ export function createBot(
     });
   });
 
+  // "/add Codenames 4-8" adds a game to the sender's open picker; "/add" alone asks for it.
+  bot.command('add', async (ctx) => {
+    if (!isGroup(ctx)) return void (await ctx.reply(texts.addOnlyInGroup));
+    if (!ctx.from) return;
+    const result = await flow.addGameByCommand(toPlayer(ctx.from), ctx.match, ctx.msg.message_id);
+    if (result === 'noPicker') await ctx.reply(texts.addNoPicker);
+  });
+
   bot.command('cancel', async (ctx) => {
     if (!isGroup(ctx)) return void (await ctx.reply(texts.cancelOnlyInGroup));
     if (!ctx.from) return;
@@ -89,6 +97,19 @@ export function createBot(
         ok: {},
         none: closed,
         empty: { text: texts.pickerEmpty, show_alert: true },
+        forbidden: { text: texts.pickerForbidden, show_alert: true },
+      }[result],
+    );
+  });
+
+  bot.callbackQuery(/^add:(\w+)$/, async (ctx) => {
+    if (!groupCallback(ctx)) return void (await ctx.answerCallbackQuery());
+    const result = await flow.askAddGame(toPlayer(ctx.from), ctx.match[1]!);
+    await ctx.answerCallbackQuery(
+      {
+        ok: {},
+        none: closed,
+        limit: { text: texts.addGameLimit(MAX_ADDED_GAMES), show_alert: true },
         forbidden: { text: texts.pickerForbidden, show_alert: true },
       }[result],
     );
@@ -141,6 +162,13 @@ export function createBot(
   // Button of join polls sent before sessions had ids.
   bot.callbackQuery(LEGACY_START_NOW_CALLBACK, (ctx) => ctx.answerCallbackQuery(closed));
 
+  // Replies to a "+ Add game" prompt. Bots get replies to their own messages even in privacy mode.
+  bot.on('message:text', async (ctx) => {
+    const replyTo = ctx.msg.reply_to_message;
+    if (!isGroup(ctx) || !replyTo || replyTo.from?.id !== ctx.me.id) return;
+    await flow.addGameFromReply(toPlayer(ctx.from), replyTo.message_id, ctx.msg.text, ctx.msg.message_id);
+  });
+
   bot.on('poll_answer', (ctx) => flow.onPollAnswer(ctx.pollAnswer));
   bot.on('poll', (ctx) => flow.onPoll(ctx.poll));
 
@@ -155,6 +183,7 @@ export async function registerCommands(bot: Bot, chatId: number): Promise<void> 
   await bot.api.setMyCommands(
     [
       { command: 'play', description: c.play },
+      { command: 'add', description: c.add },
       { command: 'games', description: c.games },
       { command: 'cancel', description: c.cancel },
       { command: 'help', description: c.help },
