@@ -128,6 +128,52 @@ describe('bot handlers', () => {
     });
   });
 
+  const reply = (text: string, replyTo: { message_id: number; fromId: number }, fromId = 5): Update =>
+    ({
+      update_id: updateId++,
+      message: {
+        message_id: 50,
+        date: 0,
+        chat: { ...group, title: 'x' },
+        from: { id: fromId, is_bot: false, first_name: 'Ann', username: 'ann' },
+        text,
+        reply_to_message: {
+          message_id: replyTo.message_id,
+          date: 0,
+          chat: { ...group, title: 'x' },
+          from: { id: replyTo.fromId, is_bot: replyTo.fromId === botInfo.id, first_name: 'x' },
+          text: 'prompt',
+        },
+      },
+    }) as unknown as Update;
+
+  it('adds a game through the "+ Add game" button and a reply to the prompt', async () => {
+    await bot.handleUpdate(message(group, '/play'));
+    const id = sessionId();
+    await bot.handleUpdate(callback(`add:${id}`));
+    expect(calls[1]).toMatchObject({
+      method: 'sendMessage',
+      payload: { text: texts.addGamePrompt('@ann'), reply_markup: { force_reply: true, selective: true } },
+    });
+
+    // The prompt got message_id 9 from the fake API. A reply to someone else's message is ignored.
+    await bot.handleUpdate(reply('Codenames 4-8', { message_id: 9, fromId: 6 }));
+    expect(flow.sessions[0]!.addedGames).toBeUndefined();
+    await bot.handleUpdate(reply('Codenames 4-8', { message_id: 9, fromId: botInfo.id }));
+    expect(flow.sessions[0]!.addedGames).toEqual([{ name: 'Codenames', minPlayers: 4, maxPlayers: 8 }]);
+    expect(flow.sessions[0]!.picker!.selected).toEqual(['Codenames']);
+  });
+
+  it('handles /add in the group and outside it', async () => {
+    await bot.handleUpdate(message(dm, '/add Codenames 4-8'));
+    expect(calls.at(-1)!.payload.text).toBe(texts.addOnlyInGroup);
+    await bot.handleUpdate(message(group, '/add Codenames 4-8'));
+    expect(calls.at(-1)!.payload.text).toBe(texts.addNoPicker);
+    await bot.handleUpdate(message(group, '/play'));
+    await bot.handleUpdate(message(group, '/add@ZemaGamesBot Codenames 4-8'));
+    expect(flow.sessions[0]!.picker!.selected).toEqual(['Codenames']);
+  });
+
   it('deletes a session with its Delete button', async () => {
     await bot.handleUpdate(message(group, '/play'));
     await bot.handleUpdate(callback(`del:${sessionId()}`));

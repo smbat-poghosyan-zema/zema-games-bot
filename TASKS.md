@@ -38,3 +38,4 @@
 - [x] Parallel sessions: one per starter, starter-only start now, delete by starter or admin
 - [x] Added Bloomgrid and Kitten Kaboom (online)
 - [x] Added Labyrinth (online)
+- [x] Starter can add a game to the picker for one round (button + reply, or /add)

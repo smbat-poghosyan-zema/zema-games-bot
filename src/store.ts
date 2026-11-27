@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Player } from './format.js';
+import type { AddedGame } from './games.js';
 import { log } from './log.js';
 
 export interface PollRef {
@@ -24,6 +25,8 @@ export interface PickerStage {
   closesAt: string;
   /** Ticked game names. */
   selected: string[];
+  /** Open "+ Add game" prompt the starter replies to. */
+  promptMessageId?: number;
 }
 
 export interface Session {
@@ -40,6 +43,8 @@ export interface Session {
   chosenGame?: string;
   /** Games ticked in the picker; the final game is chosen among them. */
   candidates?: string[];
+  /** Games the starter typed in the picker; they exist for this session only. */
+  addedGames?: AddedGame[];
   /** Players who chose "I'm in", in join order. */
   players: Player[];
   vote?: VoteStage;

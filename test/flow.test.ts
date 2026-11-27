@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { Poll, PollAnswer, User } from 'grammy/types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Player } from '../src/format.js';
-import { callbacks, GameFlow, type FlowApi } from '../src/flow.js';
+import { callbacks, GameFlow, MAX_ADDED_GAMES, type FlowApi } from '../src/flow.js';
 import { JsonStore } from '../src/store.js';
 import { texts } from '../src/texts.js';
 import { game, seq } from './helpers.js';
@@ -106,6 +106,7 @@ describe('GameFlow', () => {
               { text: '⬜ Mid', callback_data: callbacks.pick(id, MID) },
             ],
             [{ text: '⬜ Party', callback_data: callbacks.pick(id, PARTY) }],
+            [{ text: texts.addGameButton, callback_data: callbacks.addGame(id) }],
             [
               { text: texts.pickerDoneButton, callback_data: callbacks.pickDone(id) },
               { text: texts.deleteButton, callback_data: callbacks.remove(id) },
@@ -529,5 +530,148 @@ describe('GameFlow', () => {
       reply_markup: { inline_keyboard: [[{ callback_data: 'play' }]] },
     });
     expect(await flow.sendReminder()).toBe('skipped');
+  });
+  describe('adding a game in the picker', () => {
+    const ANN_MENTION = '<a href="tg://user?id=1">Ann</a>';
+
+    /** Opens Ann's picker and taps "+ Add game". Returns the session id and the prompt message id. */
+    async function openPrompt(flow: GameFlow) {
+      await flow.start(ann);
+      const id = own(flow, ann).id;
+      expect(await flow.askAddGame(ann, id)).toBe('ok');
+      return { id, prompt: own(flow, ann).picker!.promptMessageId! };
+    }
+
+    it('asks only the starter, with a force-reply prompt, and reuses an open prompt', async () => {
+      const { api, sent } = fakeApi();
+      const flow = makeFlow(api);
+      const { id, prompt } = await openPrompt(flow);
+      expect(sent.at(-1)).toMatchObject({
+        text: texts.addGamePrompt(ANN_MENTION),
+        extra: { reply_markup: { force_reply: true, selective: true } },
+      });
+      expect(await flow.askAddGame(ann, id)).toBe('ok');
+      expect(own(flow, ann).picker!.promptMessageId).toBe(prompt);
+      expect(sent).toHaveLength(2);
+      expect(await flow.askAddGame(bob, id)).toBe('forbidden');
+      expect(await flow.askAddGame(ann, 'nope')).toBe('none');
+    });
+
+    it('adds the replied game ticked, redraws the picker and cleans up the prompt', async () => {
+      const { api } = fakeApi();
+      const flow = makeFlow(api);
+      const { id, prompt } = await openPrompt(flow);
+      expect(await flow.addGameFromReply(ann, prompt, '  Codenames   4 – 8 ', 77)).toBe('ok');
+
+      const session = own(flow, ann);
+      expect(session.addedGames).toEqual([{ name: 'Codenames', minPlayers: 4, maxPlayers: 8 }]);
+      expect(session.picker!.selected).toEqual(['Codenames']);
+      expect(session.picker!.promptMessageId).toBeUndefined();
+      expect(api.editMessageReplyMarkup).toHaveBeenLastCalledWith(CHAT, session.picker!.messageId, {
+        reply_markup: {
+          inline_keyboard: expect.arrayContaining([
+            [
+              { text: '⬜ Party', callback_data: callbacks.pick(id, PARTY) },
+              { text: '✅ Codenames', callback_data: callbacks.pick(id, 3) },
+            ],
+            [{ text: texts.addGameButton, callback_data: callbacks.addGame(id) }],
+          ]),
+        },
+      });
+      expect(api.deleteMessage).toHaveBeenCalledWith(CHAT, prompt);
+      expect(api.deleteMessage).toHaveBeenCalledWith(CHAT, 77);
+
+      // The added game toggles like a catalog game.
+      expect(await flow.togglePick(ann, id, 3)).toBe('ok');
+      expect(own(flow, ann).picker!.selected).toEqual([]);
+    });
+
+    it('ignores replies from others and replies to unknown messages', async () => {
+      const { api } = fakeApi();
+      const flow = makeFlow(api);
+      const { prompt } = await openPrompt(flow);
+      expect(await flow.addGameFromReply(bob, prompt, 'Codenames 4-8', 77)).toBe('none');
+      expect(await flow.addGameFromReply(ann, 999, 'Codenames 4-8', 77)).toBe('none');
+      expect(own(flow, ann).addedGames).toBeUndefined();
+    });
+
+    it('re-asks with the format when the reply does not parse', async () => {
+      const { api, sent } = fakeApi();
+      const flow = makeFlow(api);
+      const { prompt } = await openPrompt(flow);
+      expect(await flow.addGameFromReply(ann, prompt, 'Codenames', 77)).toBe('invalid');
+      expect(sent.at(-1)!.text).toBe(texts.addGameInvalid(ANN_MENTION, 40, 50));
+      expect(api.deleteMessage).toHaveBeenCalledWith(CHAT, prompt);
+      const next = own(flow, ann).picker!.promptMessageId!;
+      expect(next).not.toBe(prompt);
+      expect(await flow.addGameFromReply(ann, next, 'Codenames 4-8', 78)).toBe('ok');
+    });
+
+    it('ticks the existing game when the name is already in the picker', async () => {
+      const { api } = fakeApi();
+      const flow = makeFlow(api);
+      const { prompt } = await openPrompt(flow);
+      expect(await flow.addGameFromReply(ann, prompt, 'mid 2-3', 77)).toBe('ok');
+      expect(own(flow, ann).addedGames).toEqual([]);
+      expect(own(flow, ann).picker!.selected).toEqual(['Mid']);
+    });
+
+    it(`allows at most ${MAX_ADDED_GAMES} added games`, async () => {
+      const { api, sent } = fakeApi();
+      const flow = makeFlow(api);
+      await flow.start(ann);
+      const id = own(flow, ann).id;
+      for (let i = 1; i <= MAX_ADDED_GAMES; i++) expect(await flow.addGameByCommand(ann, `Game${i} 2-4`, 70 + i)).toBe('ok');
+      expect(await flow.askAddGame(ann, id)).toBe('limit');
+      expect(await flow.addGameByCommand(ann, 'Another 2-4', 80)).toBe('limit');
+      expect(sent.at(-1)!.text).toBe(texts.addGameLimit(MAX_ADDED_GAMES));
+      expect(own(flow, ann).addedGames).toHaveLength(MAX_ADDED_GAMES);
+    });
+
+    it('/add needs an open picker of the sender, and asks for the game without text', async () => {
+      const { api, sent } = fakeApi();
+      const flow = makeFlow(api);
+      expect(await flow.addGameByCommand(ann, 'Codenames 4-8', 70)).toBe('noPicker');
+      await flow.start(ann);
+      expect(await flow.addGameByCommand(bob, 'Codenames 4-8', 70)).toBe('noPicker');
+      expect(await flow.addGameByCommand(ann, '', 71)).toBe('ok');
+      expect(sent.at(-1)!.text).toBe(texts.addGamePrompt(ANN_MENTION));
+      expect(own(flow, ann).picker!.promptMessageId).toBeDefined();
+    });
+
+    it('plays an added game through the join poll and the vote, then forgets it', async () => {
+      const { api, sent } = fakeApi();
+      const flow = makeFlow(api);
+      await flow.start(ann);
+      const id = own(flow, ann).id;
+      await flow.addGameByCommand(ann, 'Codenames 4-8', 70);
+      await flow.togglePick(ann, id, MID);
+      expect(await flow.finishPicking(ann, id)).toBe('ok');
+      const session = own(flow, ann);
+      expect(session.candidates).toEqual(['Mid', 'Codenames']);
+      expect(sent.at(-1)!.text).toBe(texts.joinPollQuestion('Ann', 'Mid, Codenames', 5));
+
+      await joinPlayers(flow, session.join!.pollId, [1, 2, 3, 4]);
+      await flow.onPoll(closed(session.join!.pollId));
+      const vote = own(flow, ann).vote!;
+      expect(vote.options).toEqual(['Mid', 'Codenames']);
+      for (const u of [1, 2, 3]) await flow.onPollAnswer(answer(vote.pollId, user(u, `u${u}`), [1]));
+      await flow.onPoll(closed(vote.pollId));
+      expect(sent.at(-1)!.text).toContain(texts.voteWinner('Codenames'));
+      expect(flow.sessions).toHaveLength(0);
+    });
+
+    it('deletes an open prompt with the session and on Done', async () => {
+      const { api } = fakeApi();
+      const flow = makeFlow(api);
+      const { id, prompt } = await openPrompt(flow);
+      expect(await flow.remove(ann, id)).toBe('ok');
+      expect(api.deleteMessage).toHaveBeenCalledWith(CHAT, prompt);
+
+      const second = await openPrompt(flow);
+      await flow.togglePick(ann, second.id, SMALL);
+      expect(await flow.finishPicking(ann, second.id)).toBe('ok');
+      expect(api.deleteMessage).toHaveBeenCalledWith(CHAT, second.prompt);
+    });
   });
 });

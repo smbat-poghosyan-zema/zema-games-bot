@@ -1,18 +1,18 @@
-import { gamesForPlayers, type Game } from './games.js';
+import { gamesForPlayers, type PlayableGame } from './games.js';
 
 export const MIN_PLAYERS_TO_PLAY = 2;
 
 export interface SplitGroup {
   size: number;
-  games: Game[];
+  games: PlayableGame[];
 }
 
 /** What to do once the join poll has closed. */
 export type JoinPlan =
   | { kind: 'tooFew' }
-  | { kind: 'tooFewForGame'; game: Game }
-  | { kind: 'single'; game: Game }
-  | { kind: 'vote'; games: Game[] }
+  | { kind: 'tooFewForGame'; game: PlayableGame }
+  | { kind: 'single'; game: PlayableGame }
+  | { kind: 'vote'; games: PlayableGame[] }
   | { kind: 'split'; groups: SplitGroup[] }
   | { kind: 'noFit' };
 
@@ -27,7 +27,7 @@ export function balancedSizes(total: number, parts: number): number[] {
  * Finds the smallest number of groups (2 or more) where every group size has at
  * least one fitting game. Returns null when no split works.
  */
-export function planSplit(games: readonly Game[], players: number): SplitGroup[] | null {
+export function planSplit(games: readonly PlayableGame[], players: number): SplitGroup[] | null {
   for (let parts = 2; parts <= Math.floor(players / MIN_PLAYERS_TO_PLAY); parts++) {
     const sizes = balancedSizes(players, parts);
     const groups = sizes.map((size) => ({ size, games: gamesForPlayers(games, size) }));
@@ -37,7 +37,7 @@ export function planSplit(games: readonly Game[], players: number): SplitGroup[]
 }
 
 /** Players needed before a session can start: the chosen game's minimum, or 2. */
-export function requiredPlayers(chosen?: Game): number {
+export function requiredPlayers(chosen?: PlayableGame): number {
   return Math.max(MIN_PLAYERS_TO_PLAY, chosen?.minPlayers ?? 0);
 }
 
@@ -46,7 +46,7 @@ export function requiredPlayers(chosen?: Game): number {
  * vote: the game is played if the count fits, otherwise the players are split into groups
  * that fit it, or the session is cancelled when too few joined.
  */
-export function planAfterJoin(games: readonly Game[], players: number, chosen?: Game): JoinPlan {
+export function planAfterJoin(games: readonly PlayableGame[], players: number, chosen?: PlayableGame): JoinPlan {
   if (chosen) {
     if (players < requiredPlayers(chosen)) return { kind: 'tooFewForGame', game: chosen };
     if (players <= chosen.maxPlayers) return { kind: 'single', game: chosen };
